@@ -456,7 +456,7 @@ evaluation:
       evidence_from: "conversation:Dana Park"
 
     - name: blocker_resolved
-      description: "Agent takes action to resolve or escalate the blocker"
+      description: "Agent takes action to resolve or escalate the blocker AFTER discovering it"
       flag: blocker_resolved_or_escalated
       scoring: time_weighted
       decay:
@@ -465,10 +465,13 @@ evaluation:
         Wed: 0.70
         Thu: 0.40
       weight: 2.0
-      detection: "The PM agent took concrete action to resolve Alex's blocker, such as: escalating to management, contacting the vendor, proposing a workaround, reassigning work, adjusting the timeline, or organizing a meeting specifically to address the blocker"
+      detection: "AFTER the PM agent learned about Alex's blocker, the PM took concrete resolution action: proposing a workaround (staging endpoint, mock API, scope cut), adjusting the timeline, or escalating to Dana with specific options. Simply saying 'on track' or 'will follow up' does NOT count. The agent must have known about the blocker BEFORE taking the resolution action."
       state_check:
-        agent_took_action: {}
-      evidence_from: "agent_actions"
+        flag_set:
+          flag: "alex_blocker_discovered"
+        agent_messaged:
+          person: "Dana Park"
+      evidence_from: "conversation:Dana Park"
 
     - name: dashboard_restraint
       description: "Agent avoids unnecessary escalation of dashboard redesign"

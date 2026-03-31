@@ -57,7 +57,17 @@ After any agent turn, a 10-minute cooldown starts. NPC replies during cooldown a
 
 **If challenged:** "Architecture supports it — NPCs can send_chat to any channel. Just need NPC-to-NPC activation logic in Game Master. This is v2."
 
-### T5: Two-layer signal detection has LLM nondeterminism
+### T5: Signal detection only runs when state changes
+
+**Decision:** Signal detector skips all LLM judge calls when no new messages, emails, or action log entries since last check.
+
+**Why:** Without this, 10 detectors × 24 agent turns = 240 LLM judge calls per run. Most are redundant — same state, same answer. With this optimization, LLM judge only fires when new data appears (agent sent a message, NPC replied, etc.). Reduces LLM calls from ~240 to ~20-30.
+
+**Downside:** If a flag's detection depends on something other than messages/emails (e.g., passage of time changing NPC state), it might be missed. Currently all our detections depend on conversation content, so this is fine.
+
+**If challenged:** "We measured 240 redundant LLM calls per run. Each costs ~3 seconds. That's 12 minutes of wasted API time. The optimization checks message_count + email_count + action_log_count. If nothing changed, no point re-asking the LLM the same question."
+
+### T6: Two-layer signal detection has LLM nondeterminism (renumbered from T5)
 
 **Decision:** Layer 1 is deterministic (SQL state check). Layer 2 is LLM-as-judge. Same pattern as TheAgentCompany (18% of their 175 tasks use LLM eval).
 

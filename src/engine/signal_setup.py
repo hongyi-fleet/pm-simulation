@@ -132,6 +132,12 @@ def _build_llm_detector(
                 return not ws.get_flag(flag_name)
             return check
 
+        elif check_type == "flag_set":
+            flag_name = check_params.get("flag", "")
+            def check(ws, time) -> bool:
+                return ws.get_flag(flag_name)
+            return check
+
         else:
             # Always pass if unknown check type
             return lambda ws, time: True
