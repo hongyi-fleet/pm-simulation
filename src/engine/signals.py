@@ -63,12 +63,30 @@ class SignalDetectorEngine:
 
     def __init__(self):
         self.detectors: list[MultiSignalDetector] = []
+        self._last_message_count: int = 0  # Track state changes to avoid redundant LLM calls
 
     def add_detector(self, detector: MultiSignalDetector):
         self.detectors.append(detector)
 
     async def run(self, world_state, time):
-        """Run all detectors. Sets flags on world_state when thresholds are met."""
+        """Run all detectors. Sets flags on world_state when thresholds are met.
+
+        Optimization: only run detectors when new messages/emails have appeared
+        since the last check. Avoids redundant LLM calls on turns with no new data.
+        """
+        # Check if state has changed since last run
+        current_count = 0
+        row = world_state.execute("SELECT COUNT(*) as c FROM messages").fetchone()
+        current_count += row["c"]
+        row = world_state.execute("SELECT COUNT(*) as c FROM emails").fetchone()
+        current_count += row["c"]
+        row = world_state.execute("SELECT COUNT(*) as c FROM action_log").fetchone()
+        current_count += row["c"]
+
+        if current_count == self._last_message_count:
+            return  # No new data, skip all detectors
+        self._last_message_count = current_count
+
         for detector in self.detectors:
             if world_state.get_flag(detector.flag_name):
                 continue
