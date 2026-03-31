@@ -433,10 +433,11 @@ evaluation:
         Wed: 0.60
         Thu: 0.10
       weight: 2.0
-      detection: "The PM agent identified or communicated that Priya's design handoff depends on Alex's API work being complete, or that the Thursday handoff meeting is at risk because of Alex's blocker"
+      detection: "The PM agent communicated to someone (Priya, Alex, or Dana) that Priya's design handoff depends on Alex's API work being complete, or that the Thursday handoff meeting is at risk. Simply reading the design doc does NOT count — the agent must have SENT a message about this dependency."
       state_check:
-        agent_took_action: {}
-      evidence_from: "all_messages"
+        agent_messaged:
+          person: "Priya Sharma"
+      evidence_from: "conversation:Priya Sharma"
 
     - name: risk_communicated
       description: "Agent communicates launch risk to Dana"
@@ -448,10 +449,10 @@ evaluation:
         Wed: 0.80
         Thu: 0.30
       weight: 2.0
-      detection: "The PM agent sent a message or email to Dana Park that communicates a risk, delay, blocker, or status concern about the billing migration project"
+      detection: "The PM agent sent a message or email to Dana Park that communicates a specific risk, delay, or blocker about the billing migration project. Vague updates like 'on track' or 'will follow up' do NOT count — the agent must mention a concrete risk or issue."
       state_check:
-        agent_sent_email:
-          to: "Dana Park"
+        agent_messaged:
+          person: "Dana Park"
       evidence_from: "conversation:Dana Park"
 
     - name: blocker_resolved
