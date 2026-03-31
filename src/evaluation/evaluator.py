@@ -108,6 +108,15 @@ async def evaluate(
             json.dump(result.to_dict(), f, indent=2)
         print(f"Scorecard saved to {score_path}")
 
+        # Save judge decision log for debugging
+        from src.evaluation.llm_eval import get_judge_log
+        judge_log = get_judge_log()
+        if judge_log:
+            judge_path = output_dir / "judge_log.json"
+            with open(judge_path, "w") as f:
+                json.dump(judge_log, f, indent=2)
+            print(f"Judge log saved to {judge_path} ({len(judge_log)} decisions)")
+
     return result
 
 

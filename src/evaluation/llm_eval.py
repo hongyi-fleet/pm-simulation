@@ -15,6 +15,14 @@ from src.config import LLM_TIMEOUT_DEFAULT
 logger = logging.getLogger(__name__)
 
 
+_judge_log: list[dict] = []  # Module-level log of all judge decisions
+
+
+def get_judge_log() -> list[dict]:
+    """Return all judge decisions from this run for debugging."""
+    return _judge_log
+
+
 async def evaluate_with_llm(
     content: str,
     predicate: str,
@@ -37,15 +45,30 @@ async def evaluate_with_llm(
 
     query = f'Does the following content indicate that: {predicate}?\n\n'
     query += f'Content:\n"""\n{content}\n"""\n\n'
-    query += f'Please answer "yes" if it does, or "no" if it does not. '
-    query += f'Answer ONLY "yes" or "no", nothing else. {additional_prompt}'
+    query += f'Answer in this exact format:\n'
+    query += f'VERDICT: yes or no\n'
+    query += f'EVIDENCE: one sentence explaining what specific content supports your verdict\n'
+    query += f'{additional_prompt}'
 
     try:
         response = await llm_client.generate(
             query, timeout=LLM_TIMEOUT_DEFAULT, temperature=0.0
         )
-        result = "yes" in response.lower().strip()
-        logger.info(f'Predicate "{predicate[:60]}..." evaluated to {result}')
+        response_lower = response.lower().strip()
+        result = "verdict: yes" in response_lower or (response_lower.startswith("yes"))
+
+        # Log verdict with evidence for debugging
+        import sys
+        evidence = response.strip().replace('\n', ' ')[:200]
+        print(f"  [JUDGE] {predicate[:60]}... → {'YES' if result else 'NO'} | {evidence}", file=sys.stderr)
+
+        _judge_log.append({
+            "predicate": predicate,
+            "verdict": result,
+            "evidence": evidence,
+            "content_length": len(content),
+        })
+
         return result
     except Exception as e:
         logger.error(f"LLM evaluation failed: {e}")
