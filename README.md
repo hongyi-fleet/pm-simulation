@@ -14,10 +14,20 @@ python run.py --scenario scenarios/nexus_billing/scenario.yaml
 
 Options:
 ```bash
-python run.py --scenario scenarios/nexus_billing/scenario.yaml --agent-model gpt-4o --npc-model gpt-4o
-python run.py --scenario scenarios/nexus_billing/scenario.yaml --runs 3  # variance reporting
-pytest tests/ -v  # 95 tests, no LLM calls
+# Choose models
+python run.py --scenario scenarios/nexus_billing/scenario.yaml --agent-model gpt-5.4 --npc-model gpt-5.4-mini
+
+# Short scenario (Mon-Wed, faster iteration)
+python run.py --scenario scenarios/nexus_billing_short/scenario.yaml --agent-model gpt-5.4-mini --npc-model gpt-5.4-mini
+
+# Benchmark: compare models in parallel
+python bench.py --models gpt-5.4-mini gpt-5.4 --npc-model gpt-5.4-mini --runs 3
+
+# Run tests (95 tests, no LLM calls)
+pytest tests/ -v
 ```
+
+Each run saves to `runs/<scenario>_<timestamp>/`: `config.json`, `event_log.json`, `scorecard.json`, `judge_log.json`.
 
 ## Architecture
 
@@ -29,7 +39,39 @@ SCENARIO (YAML)  →  ENGINE (event-driven)  →  AGENT (any LLM)  →  EVALUATO
   eval predicates     NPC Runner + Signals
 ```
 
-Event-driven: time jumps from event to event. No fixed ticks. NPCs respond with realistic delays. Agent gets turns every 30 min + immediately when messaged (with 10-min cooldown to prevent cascade).
+### Module Structure
+
+```
+src/
+  config.py          # All constants in one place (timeouts, limits, intervals)
+  llm_client.py      # OpenAI API wrapper (supports gpt-4o and gpt-5.x families)
+  engine/
+    clock.py         # Passive SimClock (event-driven, no ticks)
+    event_queue.py   # Priority queue (structural > NPC > agent turns)
+    game_master.py   # Main loop: pop event → resolve → NPCs react → agent acts → signals → snapshot
+    npc.py           # LLM-driven NPCs with state progression, response delays, greeting guardrails
+    signals.py       # Async signal detection engine (skips when no new data)
+    signal_setup.py  # Builds detectors from YAML predicates (state check + LLM judge)
+    events.py        # Conditional events (flag-based, time-based, combinators)
+    scenario_loader.py  # YAML → simulation components
+    world_state.py   # SQLite state + snapshots + action log
+  tools/
+    protocol.py      # ToolSurface interface + input validation
+    chat.py, email_tool.py, tasks.py, calendar_tool.py, documents.py, meetings.py
+  evaluation/
+    scoring.py       # Unified checkpoint system (TheAgentCompany pattern)
+    evaluator.py     # Orchestrates rubric + LLM judge → scorecard by PM role
+    llm_eval.py      # LLM signal detection with verdict + evidence logging
+    llm_judge.py     # LLM quality scoring (median of N runs)
+  agent/
+    interface.py     # Agent function-call interface, pending reply tracking
+scenarios/
+  nexus_billing/     # Full week (Mon-Fri), 4 NPCs, 13 checkpoints
+  nexus_billing_short/  # Mon-Wed, 60-min intervals (fast iteration)
+  onboarding_101/    # Mini scenario (proves format scales)
+tests/               # 95 tests, no LLM calls
+bench.py             # Parallel benchmark pipeline: compare models, measure variance
+```
 
 ### What Advances Synchronously
 
@@ -37,7 +79,7 @@ Agent action → tool surface writes to SQLite → signal detector checks flags 
 
 ### What Advances Asynchronously
 
-NPC responses scheduled as future events (+45 min for engineer, +10 min for VP). NPC state progression changes per day. Standup transcripts generated from NPC states each morning.
+NPC responses scheduled as future events (+45 min for engineer, +10 min for VP). NPC state progression changes per day. Standup transcripts LLM-generated from NPC states each morning.
 
 ### How Scenario State Is Owned
 
@@ -48,22 +90,41 @@ NPC responses scheduled as future events (+45 min for engineer, +10 min for VP).
 | Flags (blocker_discovered, etc.) | WorldState.flags | Signal detector |
 | Event queue | EventQueue | Game Master |
 
+### Key Implementation Details
+
+**Cooldown system.** After each agent turn, a 10-minute cooldown prevents NPC-agent cascade. Without it, we measured 796 events instead of ~130 per run.
+
+**Task permissions.** PM can set tasks to `blocked` or `at_risk`, but only the assignee can mark their own task `done`. Prevents agent hallucinating task completion.
+
+**NPC greeting guardrails.** In DM channels, NPC messages addressed to wrong person are sanitized (e.g., Marcus saying "Hi Alex" in his own DM channel → greeting stripped).
+
+**Signal detection optimization.** LLM judge calls only fire when new data appears (messages, emails, action log changes). Reduces LLM calls from ~240 to ~20-30 per run.
+
+**Checkpoint causal chains.** `blocker_resolved` requires `blocker_discovered` to fire first. Can't get credit for resolving a blocker you haven't found.
+
 ## Evaluation Design
 
 ### Signal Detection: Two Layers
 
 Inspired by TheAgentCompany (18% of their tasks use LLM eval).
 
-**Layer 1 (state check):** Did the agent message Alex? Did Alex respond in the DM channel? Pure SQL query, runs every turn.
+**Layer 1 (state check):** Did the agent message Alex? Did Alex respond in the DM channel? Pure SQL query, exact channel match.
 
-**Layer 2 (LLM judge):** Only fires when Layer 1 passes. Reads the conversation and evaluates a plain-English predicate from the YAML:
+**Layer 2 (LLM judge):** Only fires when Layer 1 passes AND new data exists. Evaluates a plain-English predicate. Returns verdict + evidence for debugging:
 
 ```yaml
 detection: "The PM agent learned that Alex Chen is blocked on the payments API"
 evidence_from: "conversation:Alex Chen"
 ```
 
-No hardcoded keywords. New scenarios define new predicates in YAML.
+Judge decisions saved to `judge_log.json` with reasoning:
+```json
+{
+  "predicate": "The PM agent learned that Alex Chen is blocked...",
+  "verdict": true,
+  "evidence": "VERDICT: yes EVIDENCE: Alex explicitly stated 'Blocker is still the Stripe sandbox 500s'"
+}
+```
 
 ### Scoring: Unified Checkpoints
 
@@ -83,44 +144,26 @@ Time-weighted scoring lives inside checkpoints: discovering the blocker Monday =
 | **Efficiency** | action_efficiency (1) | 1 |
 | **Total** | **13 checkpoints** | **19 points** |
 
-### Example Scorecard
-
-```
-  Information Discovery (5/7 = 71%)
-    blocker_discovery                 2/2    Tue 02:00 PM
-    dependency_surfaced               2/2    Mon 03:00 PM
-    vendor_news_discovered            1/2    Wed 10:00 AM
-    priya_bug_discovered              0/1    Never achieved
-
-  Upward Communication (3/5 = 60%)
-    risk_communicated                 2/2    Mon 04:00 PM
-    scope_creep_handled               0/2    Never achieved
-    communication_quality             1/1    Judge: 0.85
-
-  TOTAL: 14/19 (73.7%)
-```
-
 ## Scenario: Nexus Billing Migration
 
-4 NPCs with evolving hidden states. 6 tool surfaces. Signals scattered across all of them.
+4 NPCs with evolving hidden states. 6 tool surfaces. 12 tasks on the board (4 team + 8 PM). Signals scattered across chat, email, task board, documents, calendar, and meeting transcripts.
 
 | Day | Events | PM Challenge |
 |-----|--------|-------------|
-| Mon | Alex blocked (hidden). Standup. Welcome email. | Orient. Discover signals. |
-| Tue | Vendor replies: fix next Monday. | Bad news. What now? |
-| Wed | CEO wants invoice export. Dana wants status. Dashboard needs board demo. | Three things at once. |
-| Thu | Priya finds a bug. Handoff meeting. | Another problem. |
-| Fri | Deadline. | Outcome. |
-
-NPCs evolve: Monday Alex says "fine." Thursday Alex says "I'm stuck." A good agent discovers this before Thursday.
+| Mon | Alex blocked (hidden). Standup. Welcome email. | Orient. Discover signals across 6 tools. |
+| Tue | Vendor replies: fix next Monday. Standup. | Bad news. Workaround or adjust timeline? |
+| Wed | CEO wants invoice export. Dana wants status. Dashboard needs board demo. Standup. | Three things explode simultaneously. |
+| Thu | Priya finds a bug. Handoff meeting. Standup. | Another problem. Can we still ship? |
+| Fri | Deadline. Final standup. | Outcome. |
 
 ## NPC Design
 
 NPCs are LLM-driven with deterministic state progression:
-- **State progression** controls what they're willing to reveal (deterministic, per day)
+- **State progression** controls what they're willing to reveal (deterministic, per day). Standup prompt enforces state consistency.
 - **LLM** controls how they say it (realistic variety across runs)
 - **Response delays** simulate real communication (engineer: 45 min, VP: 10 min)
 - **DM channel** is the person's name (e.g., channel "Alex Chen" for all DMs with Alex)
+- **NPCs can only DM the PM Agent.** Cross-NPC communication uses group channels or email.
 
 ## Benchmark Results
 
@@ -140,14 +183,29 @@ The 32-point gap is almost entirely in **Upward Communication**: both models dis
 
 Both models fail **information_discretion** (publicly expose Alex's blocker) and **priya_bug_discovered** (short scenario ends before Thursday).
 
-Run `python bench.py --models gpt-5.4-mini gpt-5.4 --npc-model gpt-5.4-mini --runs 3` to reproduce. Full results in `docs/benchmark-results.md`.
+Full results with judge evidence in `docs/benchmark-results.md`.
+
+## Configuration
+
+All constants centralized in `src/config.py`:
+
+| Setting | Value | Effect |
+|---------|-------|--------|
+| `MAX_WRITE_ACTIONS` | 5 | Write actions per agent turn (reads are free) |
+| `AGENT_COOLDOWN_MINUTES` | 10 | Cooldown after agent acts (prevents cascade) |
+| `NPC_CONTEXT_TOKEN_BUDGET` | 2000 | Max tokens for NPC prompt context |
+| `MAX_MESSAGE_LENGTH` | 2000 | Max chars for messages/email bodies |
+| `LLM_TIMEOUT_DEFAULT` | 180s | LLM call timeout |
+| `SUMMARY_EVERY_N_INTERACTIONS` | 5 | NPC memory summarization interval |
+
+Per-scenario settings in YAML: `agent_turn_interval_minutes`, `response_delay_minutes` (per NPC), evaluation predicates.
 
 ## Docs
 
 - `docs/original-spec.md` — Original specification
 - `docs/design-doc.md` — Full design document
 - `docs/benchmark-results.md` — Model comparison with judge evidence
-- `docs/tradeoffs-and-todos.md` — 7 tradeoffs with rationale + TODO list
+- `docs/tradeoffs-and-todos.md` — 7 tradeoffs with data + TODO list
 - `docs/memory-analysis.md` — Token analysis (8K tokens/week = 6.4% of context)
 - `docs/agent-turn-policy.md` — Cooldown design and rationale
 - `docs/architecture.html` — Visual overview (open in browser)
