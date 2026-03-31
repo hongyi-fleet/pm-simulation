@@ -65,6 +65,22 @@ class TaskTool:
         if row is None:
             return ActionResult(success=False, error=f"Task {task_id} not found")
 
+        sender = params.get("sender", "")
+        assignee = row["assignee"]
+        new_status = params.get("status", "")
+
+        # Permission check: only the assignee can mark their own task as "done"
+        # PM can change status to "blocked", "at_risk", or add comments
+        if new_status == "done" and sender != assignee:
+            return ActionResult(
+                success=False,
+                error=f"Only {assignee} can mark this task as done. You can set it to 'blocked' or 'at_risk' instead."
+            )
+
+        # Prevent re-marking already done tasks
+        if new_status == "done" and row["status"] == "done":
+            return ActionResult(success=False, error="Task is already done")
+
         updates = []
         update_params = []
         for field in ("status", "assignee", "description"):

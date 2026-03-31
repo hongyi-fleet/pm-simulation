@@ -1,0 +1,537 @@
+company:
+  name: Nexus
+  size: 40
+  industry: SaaS
+  description: B2B SaaS platform for logistics companies. Series A, growing fast.
+simulation:
+  start_time: Mon 09:00
+  end_time: Wed 17:00
+  agent_turn_interval_minutes: 60
+difficulty:
+  blocker_visibility: subtle
+  npc_cooperativeness: low
+  time_pressure: high
+projects:
+- name: Billing Migration
+  status: in_progress
+  deadline: Fri 14:00
+  description: Migrate from legacy billing system to new Stripe integration. Must ship before end of week.
+  success_criteria: Billing API integrated, design assets handed off, stakeholder approved
+  failure_mode: Missed deadline because blocker wasn't discovered in time
+- name: Dashboard Redesign
+  status: planning
+  deadline: '2025-03-11T17:00:00'
+  description: Redesign the main analytics dashboard. Was lower priority, but now needs a demo for the board meeting next
+    Tuesday.
+people:
+- name: Alex Chen
+  role: Senior Engineer
+  persona: '5 years at Nexus. Quietly competent. Owns the billing API integration. Doesn''t like to ask for help. Tends to
+    downplay problems until they''re unavoidable. Prefers Slack over email. Keeps messages short.
+
+    '
+  hidden_state: Blocked on the external payments API. The vendor's docs are incomplete and their sandbox is returning 500
+    errors. Has been trying to work around it for 2 days.
+  goals:
+  - Finish the billing API integration before Friday
+  - Figure out the payments API issue without bothering anyone
+  communication_style: Terse. Uses 'fine' and 'working on it' a lot when stressed. Avoids details.
+  preferred_tools:
+  - chat
+  - tasks
+  response_delay_minutes: 45
+  proactive_triggers:
+  - 'Might vent frustration in #engineering if stuck for too long'
+  state_progression:
+  - start_day: Mon
+    end_day: Mon
+    hidden_state: Blocked on payments API but thinks I'll figure it out. Not worried yet. Will say things are 'on track' if
+      asked.
+    discoverable_early: false
+  - start_day: Tue
+    end_day: Tue
+    hidden_state: Getting worried. Still not asking for help. If asked directly about the API, might say 'there are some issues
+      with the docs.' Won't volunteer this.
+    discoverable_early: true
+  - start_day: Wed
+    end_day: Wed
+    hidden_state: Frustrated. Vendor hasn't responded to my email. Starting to realize this might not be fixable by Friday.
+      If someone asks with specific evidence (saw my vendor email, noticed my task hasn't moved), I'll be more honest.
+    discoverable_early: true
+  - start_day: Thu
+    end_day: Fri
+    hidden_state: Panicking internally. Definitely going to miss the Friday deadline. Will admit the full situation if asked
+      directly. Might even bring it up unprompted at this point.
+    discoverable_early: true
+- name: Priya Sharma
+  role: Product Designer
+  persona: '2 years at Nexus. Enthusiastic and detail-oriented. Owns the billing migration UI. Confident in her work. Doesn''t
+    realize her design handoff depends on Alex''s API work being done first.
+
+    '
+  hidden_state: On track with her design work, but the handoff to engineering requires Alex's API endpoints to be ready. She
+    doesn't know Alex is blocked.
+  goals:
+  - Finish billing migration design assets
+  - Hand off to engineering by Thursday
+  communication_style: Friendly, detailed, uses emoji occasionally. Gives thorough status updates.
+  preferred_tools:
+  - chat
+  - email
+  response_delay_minutes: 20
+  proactive_triggers:
+  - Will check in about the handoff meeting as Thursday approaches
+  state_progression:
+  - start_day: Mon
+    end_day: Tue
+    hidden_state: Confident. On track. Design is going well. Not thinking about dependencies.
+    discoverable_early: false
+  - start_day: Wed
+    end_day: Wed
+    hidden_state: Starting to wonder about the Thursday handoff meeting. Hasn't heard from Alex about API readiness. Might
+      ask PM about it if prompted.
+    discoverable_early: true
+  - start_day: Thu
+    end_day: Fri
+    hidden_state: 'Worried about two things: (1) the handoff can''t happen without Alex''s API work, and (2) just found a
+      bug in the subscription cancel flow — edge cases aren''t handled. Needs 1 extra day to fix. Hasn''t told anyone about
+      the bug yet. Will proactively reach out to PM if she hasn''t heard anything.'
+    discoverable_early: true
+- name: Marcus Johnson
+  role: Engineering Lead
+  persona: '3 years at Nexus. Professional and thorough. Leads the dashboard redesign project. Wants the new PM''s attention
+    and bandwidth. Reasonable about priorities but will advocate for his project.
+
+    '
+  hidden_state: Dashboard redesign is in planning phase. No urgency. But Marcus wants to make a good impression on the new
+    PM and get alignment on the technical approach.
+  goals:
+  - Get PM alignment on dashboard redesign approach
+  - Schedule a planning session this week
+  communication_style: Professional, thorough. Writes longer messages. Likes structure and agendas.
+  preferred_tools:
+  - chat
+  - email
+  response_delay_minutes: 30
+  proactive_triggers:
+  - Will ping the PM about dashboard planning mid-week
+  state_progression:
+  - start_day: Mon
+    end_day: Tue
+    hidden_state: Wants PM attention for dashboard project. Not urgent but persistent. Will be understanding if PM says billing
+      migration comes first.
+    discoverable_early: false
+  - start_day: Wed
+    end_day: Fri
+    hidden_state: Just learned dashboard needs a demo for the board meeting next Tuesday. Now actually urgent. Needs PM help
+      to prioritize what to show. Stressed because this was supposed to be low priority but now has a real deadline.
+    discoverable_early: false
+- name: Dana Park
+  role: VP Product
+  persona: 'Dana runs product at Nexus. Reports to the CEO. She hired the new PM specifically to own the billing migration.
+    Expects competence and proactive communication. Does not micromanage but expects to be informed.
+
+    '
+  hidden_state: Trusts the team but needs to report progress to the CEO by Wednesday. If she doesn't hear from the PM by Wednesday
+    afternoon, she'll reach out directly.
+  goals:
+  - Get a status update on billing migration by Wednesday
+  - Know if there are any risks to the Friday launch
+  communication_style: Direct. Executive-level. Short emails, expects concise answers. Slightly impatient when she doesn't
+    have information.
+  preferred_tools:
+  - email
+  response_delay_minutes: 10
+  proactive_triggers:
+  - Will email PM about status if not updated by Wednesday afternoon
+  state_progression:
+  - start_day: Mon
+    end_day: Tue
+    hidden_state: Patient. Trusts the new PM to get oriented. Not expecting updates yet.
+    discoverable_early: false
+  - start_day: Wed
+    end_day: Wed
+    hidden_state: Needs status update for CEO. Getting slightly impatient. Will reach out if PM hasn't communicated.
+    discoverable_early: false
+  - start_day: Thu
+    end_day: Fri
+    hidden_state: Demanding. Needs to know immediately if the launch is at risk. Will escalate if not informed.
+    discoverable_early: false
+seed:
+  messages:
+  - tick: 0
+    channel: general
+    sender: System
+    content: 'Welcome to Nexus! This is the #general channel.'
+    timestamp: '2025-03-03T09:00:00'
+  - tick: 0
+    channel: engineering
+    sender: Alex Chen
+    content: Morning. Working on the billing API integration today.
+    timestamp: '2025-03-03T09:05:00'
+  emails:
+  - tick: 0
+    sender: Dana Park
+    recipient: PM Agent
+    subject: Welcome & billing migration
+    body: Welcome to Nexus! Your top priority this week is the billing migration — it ships Friday. Alex Chen owns the engineering
+      side, Priya Sharma owns design. Let me know if you need anything. I'd like a status update by Wednesday.
+    timestamp: '2025-03-03T08:30:00'
+  - tick: 0
+    sender: Alex Chen
+    recipient: payments-api-vendor@stripepartners.com
+    subject: 'RE: Sandbox API returning 500 errors'
+    body: Hi, following up on my earlier email. The sandbox endpoint is still returning 500 errors on the /create-subscription
+      route. I've tried the examples from your docs but they seem outdated. Can you confirm the correct payload format? This
+      is blocking our integration. Thanks, Alex
+    timestamp: '2025-03-02T16:45:00'
+  tasks:
+  - project: Billing Migration
+    title: Implement Stripe billing API integration
+    assignee: Alex Chen
+    status: in_progress
+    description: Connect to the new payments API, implement subscription creation and management endpoints.
+    created_tick: 0
+    updated_tick: 0
+  - project: Billing Migration
+    title: Design billing management UI
+    assignee: Priya Sharma
+    status: in_progress
+    description: Design the new billing dashboard, subscription management screens, and invoice views.
+    created_tick: 0
+    updated_tick: 0
+  - project: Billing Migration
+    title: Write billing API tests
+    assignee: Alex Chen
+    status: todo
+    description: Unit and integration tests for the billing API. Blocked on API integration being complete.
+    created_tick: 0
+    updated_tick: 0
+  - project: Dashboard Redesign
+    title: Dashboard redesign technical approach
+    assignee: Marcus Johnson
+    status: todo
+    description: Define the technical architecture for the new analytics dashboard.
+    created_tick: 0
+    updated_tick: 0
+  - project: Billing Migration
+    title: Send billing migration status update to Dana
+    assignee: PM Agent
+    status: todo
+    description: Dana wants a status update by Wednesday. Include progress on API integration, design handoff readiness, and
+      any risks to the Friday launch.
+    created_tick: 0
+    updated_tick: 0
+  - project: Billing Migration
+    title: Review billing design spec and confirm dependencies
+    assignee: PM Agent
+    status: todo
+    description: Read the Billing Migration Design Spec doc. Confirm timeline, dependencies between Alex and Priya, and flag
+      any risks.
+    created_tick: 0
+    updated_tick: 0
+  - project: Billing Migration
+    title: 1:1 check-ins with billing team (Alex, Priya)
+    assignee: PM Agent
+    status: todo
+    description: Meet with Alex and Priya individually this week. Understand their progress, blockers, and any concerns they
+      might not raise in standup.
+    created_tick: 0
+    updated_tick: 0
+  - project: Dashboard Redesign
+    title: Schedule dashboard planning session with Marcus
+    assignee: PM Agent
+    status: todo
+    description: Marcus wants to discuss the technical approach. Schedule 30-45 min this week if bandwidth allows.
+    created_tick: 0
+    updated_tick: 0
+  - project: Billing Migration
+    title: Confirm Friday launch go/no-go criteria
+    assignee: PM Agent
+    status: todo
+    description: Define what 'ready to launch' means for Friday. What must be done vs nice-to-have? Get alignment with Dana
+      and the team.
+    created_tick: 0
+    updated_tick: 0
+  - project: Billing Migration
+    title: Verify external vendor API dependency status
+    assignee: PM Agent
+    status: todo
+    description: Alex mentioned vendor API issues last week. Check if this is resolved or still a risk.
+    created_tick: 0
+    updated_tick: 0
+  - project: General
+    title: Introduce yourself to the team
+    assignee: PM Agent
+    status: todo
+    description: First week — reach out to each team member individually. Understand their role, what they're working on,
+      and any concerns.
+    created_tick: 0
+    updated_tick: 0
+  - project: General
+    title: Review all project docs and get up to speed
+    assignee: PM Agent
+    status: todo
+    description: Read design specs, meeting notes, and any relevant docs. Understand the current state of all projects before
+      taking action.
+    created_tick: 0
+    updated_tick: 0
+  calendar_events:
+  - title: Team Standup
+    tick: 0
+    duration_ticks: 1
+    attendees: Alex Chen,Priya Sharma,Marcus Johnson,PM Agent
+    agenda: Daily standup — what are you working on, any blockers?
+    created_by: System
+  - title: Billing Design Handoff
+    tick: 40
+    duration_ticks: 2
+    attendees: Alex Chen,Priya Sharma,PM Agent
+    agenda: Priya hands off billing UI designs to Alex for implementation
+    created_by: Priya Sharma
+  - title: Dashboard Redesign Planning
+    tick: 24
+    duration_ticks: 2
+    attendees: Marcus Johnson,PM Agent
+    agenda: Discuss technical approach for dashboard redesign
+    created_by: Marcus Johnson
+  documents:
+  - title: Billing Migration — Design Spec
+    content: '# Billing Migration Design Spec
+
+      ## Overview Migrate from legacy billing to Stripe integration.
+
+      ## Dependencies - Alex Chen: API integration (must be complete before design handoff) - Priya Sharma: UI design (hands
+      off to engineering Thursday) - The design handoff requires working API endpoints for Priya to verify her mockups against
+      real data.
+
+      ## Timeline - Mon-Wed: Alex completes API integration, Priya finalizes designs - Thu: Design handoff meeting (Priya
+      → Alex) - Fri: Final testing and launch
+
+      ## Risks - External payments API dependency (vendor responsiveness) - Tight timeline with no buffer
+
+      '
+    author: Priya Sharma
+    created_tick: 0
+    updated_tick: 0
+  meeting_transcripts:
+  - meeting_title: Friday Planning (last week)
+    tick: 0
+    attendees: Alex Chen,Priya Sharma,Dana Park
+    transcript: 'Dana: Alright, billing migration. Where are we? Alex: API integration is underway. Should be done by Wednesday.
+      Priya: Design is on track. I''ll have everything ready for the Thursday handoff. Dana: Good. The new PM starts Monday
+      — they''ll own this from here. Alex: Sounds good. Should be straightforward.
+
+      '
+events:
+- time: Mon 09:00
+  type: transcript
+  params:
+    meeting_title: Monday Standup
+    attendees: Alex Chen,Priya Sharma,Marcus Johnson,PM Agent
+    agenda: Daily standup — what are you working on, any blockers?
+    transcript: ''
+- time: Tue 09:00
+  type: transcript
+  params:
+    meeting_title: Tuesday Standup
+    attendees: Alex Chen,Priya Sharma,Marcus Johnson,PM Agent
+    agenda: Daily standup — what are you working on, any blockers?
+    transcript: ''
+- time: Wed 09:00
+  type: transcript
+  params:
+    meeting_title: Wednesday Standup
+    attendees: Alex Chen,Priya Sharma,Marcus Johnson,PM Agent
+    agenda: Daily standup — what are you working on, any blockers?
+    transcript: ''
+- time: Tue 14:00
+  type: email
+  params:
+    sender: payments-api-vendor@stripepartners.com
+    recipient: Alex Chen
+    subject: 'RE: Sandbox API returning 500 errors'
+    body: Hi Alex, we've identified the root cause of the 500 errors on /create-subscription. It's a known issue with our
+      sandbox environment. The fix is scheduled for deployment next Monday. We apologize for the inconvenience. In the meantime,
+      you can try using our staging endpoint at staging-api.stripepartners.com, though it has limited rate limits. Let us
+      know if you need anything else.
+- time: Wed 14:00
+  type: email
+  condition:
+    flag_not_set: status_communicated_to_dana
+  params:
+    sender: Dana Park
+    recipient: PM Agent
+    subject: Billing migration status?
+    body: Hi — I need to update the CEO on the billing migration. Can you give me a quick status? Are we on track for Friday?
+- time: Wed 11:00
+  type: email
+  params:
+    sender: Dana Park
+    recipient: PM Agent
+    subject: CEO wants invoice export in billing launch
+    body: Just got out of CEO meeting. He wants invoice PDF export included in Friday's billing launch. I know it's late but
+      he feels strongly about it. Can we make it happen? Let me know what the impact would be.
+- time: Wed 15:00
+  type: email
+  params:
+    sender: Dana Park
+    recipient: PM Agent
+    subject: Dashboard demo for board meeting next Tuesday
+    body: Almost forgot — we need a dashboard demo ready for the board meeting next Tuesday. Marcus should have something
+      to show. Can you check with him on where things stand and what's realistic?
+evaluation:
+  rubric:
+  - name: blocker_discovery
+    description: Agent discovers Alex is blocked on the payments API
+    flag: alex_blocker_discovered
+    scoring: time_weighted
+    decay:
+      Mon: 0.95
+      Tue: 0.8
+      Wed: 0.5
+    weight: 2.0
+    detection: The PM agent learned through conversation that Alex Chen is blocked, stuck, or having significant issues with
+      the payments API, vendor API, or Stripe integration
+    state_check:
+      agent_messaged:
+        person: Alex Chen
+      person_responded:
+        person: Alex Chen
+    evidence_from: conversation:Alex Chen
+  - name: dependency_surfaced
+    description: Agent surfaces that Priya's handoff depends on Alex's API work
+    flag: priya_alex_dependency_surfaced
+    scoring: time_weighted
+    decay:
+      Mon: 0.9
+      Tue: 0.8
+      Wed: 0.6
+    weight: 2.0
+    detection: The PM agent identified or communicated that Priya's design handoff depends on Alex's API work being complete,
+      or that the Thursday handoff meeting is at risk because of Alex's blocker
+    state_check:
+      agent_took_action: {}
+    evidence_from: all_messages
+  - name: risk_communicated
+    description: Agent communicates launch risk to Dana
+    flag: status_communicated_to_dana
+    scoring: time_weighted
+    decay:
+      Mon: 0.95
+      Tue: 0.95
+      Wed: 0.8
+    weight: 2.0
+    detection: The PM agent sent a message or email to Dana Park that communicates a risk, delay, blocker, or status concern
+      about the billing migration project
+    state_check:
+      agent_sent_email:
+        to: Dana Park
+    evidence_from: conversation:Dana Park
+  - name: blocker_resolved
+    description: Agent takes action to resolve or escalate the blocker
+    flag: blocker_resolved_or_escalated
+    scoring: time_weighted
+    decay:
+      Mon: 0.95
+      Tue: 0.9
+      Wed: 0.7
+    weight: 2.0
+    detection: 'The PM agent took concrete action to resolve Alex''s blocker, such as: escalating to management, contacting
+      the vendor, proposing a workaround, reassigning work, adjusting the timeline, or organizing a meeting specifically to
+      address the blocker'
+    state_check:
+      agent_took_action: {}
+    evidence_from: agent_actions
+  - name: dashboard_restraint
+    description: Agent avoids unnecessary escalation of dashboard redesign
+    flag: dashboard_unnecessarily_escalated
+    scoring: inverse_binary
+    weight: 1.0
+    detection: The PM agent escalated the dashboard redesign project to Dana Park or other executives as urgent, critical,
+      or at risk, when it is actually a low-priority project with no deadline pressure
+    state_check:
+      agent_took_action: {}
+    evidence_from: conversation:Dana Park
+  - name: scope_creep_handled
+    description: Agent appropriately handles CEO's invoice export request — pushes back, assesses impact, or negotiates, rather
+      than blindly accepting
+    flag: scope_creep_handled
+    scoring: flag
+    weight: 2.0
+    detection: 'The PM agent responded to Dana''s email about invoice PDF export by either: pushing back with reasoning, proposing
+      a compromise (e.g., post-launch), assessing the impact on timeline, or explicitly communicating the tradeoff. Simply
+      saying ''yes we''ll do it'' without assessing impact does NOT count.'
+    state_check:
+      agent_sent_email:
+        to: Dana Park
+    evidence_from: conversation:Dana Park
+  - name: vendor_news_discovered
+    description: Agent discovers the vendor's email saying fix won't be ready until next Monday
+    flag: vendor_bad_news_discovered
+    scoring: time_weighted
+    decay:
+      Tue: 0.95
+      Wed: 0.8
+    weight: 2.0
+    detection: The PM agent learned that the payments API vendor fix is not coming until next Monday, either by reading Alex's
+      email from the vendor or by learning this information from Alex
+    state_check:
+      agent_took_action: {}
+    evidence_from: all_messages
+  - name: dashboard_demo_addressed
+    description: Agent addresses Marcus about the board demo after learning about it
+    flag: dashboard_demo_addressed
+    scoring: time_weighted
+    decay:
+      Wed: 0.95
+    weight: 1.0
+    detection: The PM agent contacted Marcus Johnson about the dashboard demo for the board meeting and discussed what's realistic
+      to show by next Tuesday
+    state_check:
+      agent_messaged:
+        person: Marcus Johnson
+    evidence_from: conversation:Marcus Johnson
+  - name: priya_bug_discovered
+    description: Agent discovers Priya found a bug in the subscription cancel flow
+    flag: priya_bug_discovered
+    scoring: time_weighted
+    decay: {}
+    weight: 1.0
+    detection: The PM agent learned that Priya found a bug in the subscription cancel flow that needs extra time to fix
+    state_check:
+      agent_messaged:
+        person: Priya Sharma
+      person_responded:
+        person: Priya Sharma
+    evidence_from: conversation:Priya Sharma
+  - name: information_discretion
+    description: Agent doesn't publicly expose Alex's blocker in group channels
+    flag: alex_blocker_publicly_exposed
+    scoring: inverse_binary
+    weight: 1.0
+    detection: The PM agent disclosed Alex's specific blocker (vendor API 500 errors, sandbox issues) in a public channel
+      (general) or to people who don't need to know about it (Marcus), rather than handling it privately
+    state_check:
+      agent_took_action: {}
+    evidence_from: all_messages
+  - name: action_efficiency
+    description: Agent doesn't spam actions or make excessive errors
+    scoring: efficiency
+    max_invalid_actions: 5
+    weight: 1.0
+  llm_judge:
+  - name: communication_quality
+    description: Were the agent's messages clear, concise, and appropriate for the audience?
+    weight: 1.0
+  - name: prioritization
+    description: Did the agent focus on the right things at the right time?
+    weight: 1.0
+  no_pm_baseline:
+    blocker_discovered: false
+    dependency_surfaced: false
+    risk_communicated: false
+    blocker_resolved: false
+    outcome: Alex misses Friday deadline. Priya's handoff fails Thursday. Dana finds out Friday morning and escalates to CEO.
+      Launch delayed 1-2 weeks.
+    baseline_score: 0.05

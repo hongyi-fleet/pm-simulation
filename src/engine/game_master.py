@@ -445,8 +445,13 @@ Your current internal state: {current_state}
 Your communication style: {npc.communication_style or "Professional"}
 
 Give a brief standup update (1-3 sentences). Stay in character.
-If you're struggling, you might downplay it. If you're confident, say so.
-Do NOT reveal hidden problems unless your internal state says you would.
+
+CRITICAL: Your internal state describes how you feel and what you would say.
+You MUST reflect your internal state in your update:
+- If your state says you're struggling or frustrated, you MUST show some sign of it (hedging, vague language, mentioning "issues" or "challenges")
+- If your state says you're confident, say so clearly
+- If your state says you're worried, your tone should reflect worry
+- DO NOT say "no blockers" or "on track" if your internal state says you ARE struggling
 
 Your update:""",
                         timeout=LLM_TIMEOUT_DEFAULT,

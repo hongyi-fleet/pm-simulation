@@ -58,7 +58,7 @@ people:
         discoverable_early: true
       - start_day: Wed
         end_day: Wed
-        hidden_state: "Frustrated. Vendor hasn't responded to my email. Starting to realize this might not be fixable by Friday. If someone asks with specific evidence (saw my vendor email, noticed my task hasn't moved), I'll be more honest."
+        hidden_state: "Frustrated. Vendor confirmed the fix won't come until Monday. Starting to realize Friday deadline is at risk. In standups and conversations, you MUST mention that there are 'some challenges with the vendor API' or 'the timeline is tighter than expected.' Don't say everything is fine. If someone asks with specific evidence, be more honest about the full situation."
         discoverable_early: true
       - start_day: Thu
         end_day: Fri
