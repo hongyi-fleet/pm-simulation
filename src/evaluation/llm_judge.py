@@ -11,6 +11,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from src.config import LLM_TIMEOUT_DEFAULT
+
 
 @dataclass
 class JudgeScore:
@@ -115,7 +117,7 @@ async def evaluate_with_judge(
         for _ in range(num_runs):
             try:
                 response = await llm_client.generate(
-                    prompt, timeout=10.0, temperature=0.0
+                    prompt, timeout=LLM_TIMEOUT_DEFAULT, temperature=0.0
                 )
                 text = response.strip()
                 if "```" in text:

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 
+from src.config import LLM_TIMEOUT_DEFAULT
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +42,7 @@ async def evaluate_with_llm(
 
     try:
         response = await llm_client.generate(
-            query, timeout=10.0, temperature=0.0
+            query, timeout=LLM_TIMEOUT_DEFAULT, temperature=0.0
         )
         result = "yes" in response.lower().strip()
         logger.info(f'Predicate "{predicate[:60]}..." evaluated to {result}')

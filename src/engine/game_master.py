@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from src.config import LLM_TIMEOUT_DEFAULT
 from src.engine.clock import SimClock
 from src.engine.event_queue import EventQueue, SimEvent, EventPriority
 from src.engine.events import ScenarioEvent
@@ -448,7 +449,7 @@ If you're struggling, you might downplay it. If you're confident, say so.
 Do NOT reveal hidden problems unless your internal state says you would.
 
 Your update:""",
-                        timeout=30.0,
+                        timeout=LLM_TIMEOUT_DEFAULT,
                         temperature=0.7,
                     )
                     text = response.strip().strip('"').strip("'")

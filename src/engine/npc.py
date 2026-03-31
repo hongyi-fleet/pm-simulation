@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 
-from src.config import NPC_CONTEXT_TOKEN_BUDGET, SUMMARY_EVERY_N_INTERACTIONS
+from src.config import NPC_CONTEXT_TOKEN_BUDGET, SUMMARY_EVERY_N_INTERACTIONS, LLM_TIMEOUT_DEFAULT, NPC_TEMPERATURE
 
 
 @dataclass
@@ -228,7 +228,7 @@ Respond with exactly one JSON object:"""
 
         try:
             response = await self.llm_client.generate(
-                prompt, timeout=20.0, temperature=0.7
+                prompt, timeout=LLM_TIMEOUT_DEFAULT, temperature=NPC_TEMPERATURE
             )
             text = response.strip()
             if "```" in text:
