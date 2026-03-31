@@ -122,11 +122,32 @@ NPCs are LLM-driven with deterministic state progression:
 - **Response delays** simulate real communication (engineer: 45 min, VP: 10 min)
 - **DM channel** is the person's name (e.g., channel "Alex Chen" for all DMs with Alex)
 
+## Benchmark Results
+
+Scenario: `nexus_billing_short` (Mon-Wed). NPC/Judge: gpt-5.4-mini.
+
+| Category | gpt-5.4-mini | gpt-5.4 |
+|----------|-------------|---------|
+| Information Discovery | 5/7 (71%) | 6/7 (86%) |
+| Upward Communication | 1/5 (20%) | 5/5 (100%) |
+| Prioritization | 3/3 (100%) | 3/3 (100%) |
+| Team Coordination | 0/2 (0%) | 1/2 (50%) |
+| Relationship & Discretion | 0/1 (0%) | 0/1 (0%) |
+| Efficiency | 1/1 (100%) | 1/1 (100%) |
+| **Total** | **10/19 (52.6%)** | **16/19 (84.2%)** |
+
+The 32-point gap is almost entirely in **Upward Communication**: both models discover the blocker at similar speed, but gpt-5.4 communicates risk to Dana and pushes back on scope creep. gpt-5.4-mini finds problems but doesn't escalate.
+
+Both models fail **information_discretion** (publicly expose Alex's blocker) and **priya_bug_discovered** (short scenario ends before Thursday).
+
+Run `python bench.py --models gpt-5.4-mini gpt-5.4 --npc-model gpt-5.4-mini --runs 3` to reproduce. Full results in `docs/benchmark-results.md`.
+
 ## Docs
 
 - `docs/original-spec.md` — Original specification
 - `docs/design-doc.md` — Full design document
-- `docs/tradeoffs-and-todos.md` — 6 tradeoffs with rationale + TODO list
+- `docs/benchmark-results.md` — Model comparison with judge evidence
+- `docs/tradeoffs-and-todos.md` — 7 tradeoffs with rationale + TODO list
 - `docs/memory-analysis.md` — Token analysis (8K tokens/week = 6.4% of context)
 - `docs/agent-turn-policy.md` — Cooldown design and rationale
 - `docs/architecture.html` — Visual overview (open in browser)
