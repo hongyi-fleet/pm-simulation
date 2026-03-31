@@ -67,8 +67,7 @@ class ToolSurface(Protocol):
 
 
 # Validation constants
-MAX_MESSAGE_LENGTH = 2000
-MAX_SUBJECT_LENGTH = 500
+from src.config import MAX_MESSAGE_LENGTH, MAX_SUBJECT_LENGTH
 
 
 def validate_text_length(text: str, field: str, max_length: int) -> str | None:

@@ -73,7 +73,8 @@ class GameMaster:
         self.turn_count = 0
         self._last_agent_results: list[dict] = []
         self._agent_cooldown_until: datetime | None = None
-        self._cooldown_minutes = 10  # Configurable via scenario YAML
+        from src.config import AGENT_COOLDOWN_MINUTES
+        self._cooldown_minutes = AGENT_COOLDOWN_MINUTES
         self._pending_notifications: list[str] = []
 
     async def run(self) -> list[EventRecord]:

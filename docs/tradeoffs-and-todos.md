@@ -99,15 +99,15 @@ After any agent turn, a 10-minute cooldown starts. NPC replies during cooldown a
 - [x] Detailed terminal logging (NPC message content, agent actions, flags)
 
 ### Priority 1 (current system)
-- [ ] Clean up: extract hardcoded variables and prompts into separate config files (e.g., `src/config.py` for constants, `src/prompts/` for agent and NPC prompt templates)
+- [ ] Run full simulation end-to-end, verify blocker_discovery now works with signal detection fix
+- [ ] Run 3x, measure score variance
+- [ ] Test different models as agent (GPT-4o, GPT-5.4, GPT-5.4-pro) and compare scores
 - [ ] Persist SQLite to disk (`runs/<name>/simulation.db`)
 - [ ] Add noise to seed data (20+ irrelevant emails, chat messages)
-- [ ] Run full simulation end-to-end, verify blocker_discovery now works
-- [ ] Run 3x, measure score variance
-- [ ] Test different models as agent (GPT-4o, GPT-5.4, Claude, Gemini) and compare scores
+- [ ] Clean up: extract hardcoded variables and prompts into separate config files
+- [ ] Change blocker_resolved detection from behavior-intent check to world-state check (TheAgentCompany pattern: check if task status changed, meeting scheduled, or email sent to vendor — not if agent "talked about escalating")
 - [ ] NPC state change / check design: make state transitions event-driven instead of day-level. Wire up `discoverable_early` field.
 - [ ] Delay response simulation improvement: variable delays based on time of day, NPC activity, message urgency.
-- [ ] Update README to match current event-driven architecture
 - [ ] Update design doc with all changes since last review
 - [ ] Add time management checkpoint (did agent propose scope cut or timeline adjustment?)
 

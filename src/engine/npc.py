@@ -19,8 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 
-NPC_CONTEXT_TOKEN_BUDGET = 2000
-SUMMARY_EVERY_N_INTERACTIONS = 5
+from src.config import NPC_CONTEXT_TOKEN_BUDGET, SUMMARY_EVERY_N_INTERACTIONS
 
 
 @dataclass

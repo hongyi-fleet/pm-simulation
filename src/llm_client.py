@@ -125,7 +125,7 @@ class LLMClient:
     async def generate(
         self,
         prompt: str,
-        timeout: float = 20.0,
+        timeout: float = 180.0,
         temperature: float = 0.7,
         model: str | None = None,
     ) -> str:
@@ -232,7 +232,7 @@ class LLMClient:
         self,
         system: str,
         messages: list[dict],
-        timeout: float = 45.0,
+        timeout: float = 180.0,
         temperature: float = 0.0,
     ) -> str:
         """Generate with conversation history. Used for the agent."""

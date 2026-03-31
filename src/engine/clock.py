@@ -13,12 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 
-# Simulation starts Monday 9:00 AM
-BASE_DATE = datetime(2025, 3, 3, 9, 0)  # A Monday
-WORK_START_HOUR = 9
-WORK_END_HOUR = 17
-SIM_START = BASE_DATE
-SIM_END = BASE_DATE + timedelta(days=4, hours=8)  # Friday 5pm
+from src.config import BASE_DATE, WORK_START_HOUR, WORK_END_HOUR, SIM_START, SIM_END
 
 
 @dataclass

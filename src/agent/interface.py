@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-MAX_WRITE_ACTIONS = 5
+from src.config import MAX_WRITE_ACTIONS
 
 READ_ACTIONS = {
     "read_chats", "read_emails", "list_tasks", "check_calendar",
