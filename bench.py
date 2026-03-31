@@ -120,76 +120,128 @@ async def run_once(scenario_path: str, agent_model: str, npc_model: str,
 
 
 def print_comparison(results: dict):
-    """Print side-by-side comparison of models."""
+    """Print side-by-side comparison of models with statistics."""
+    import statistics
+
     print("\n" + "=" * 80)
     print("BENCHMARK COMPARISON")
     print("=" * 80)
 
-    # Header
     models = list(results.keys())
+    runs_per_model = max(len(v) for v in results.values())
     col_width = max(20, max(len(m) for m in models) + 2)
+
+    # === Per-checkpoint breakdown ===
     header = f"{'Checkpoint':<35}"
     for model in models:
         header += f" {model:>{col_width}}"
     print(header)
     print("-" * (35 + (col_width + 1) * len(models)))
 
-    # Collect all checkpoint names
     all_checkpoints = []
     for model_results in results.values():
         for run in model_results:
-            for cp in run["checkpoints"]:
+            for cp in run.get("checkpoints", []):
                 if cp["name"] not in all_checkpoints:
                     all_checkpoints.append(cp["name"])
 
-    # Print each checkpoint
     for cp_name in all_checkpoints:
         row = f"{cp_name:<35}"
         for model in models:
             scores = []
+            total = 0
             for run in results[model]:
-                for cp in run["checkpoints"]:
+                for cp in run.get("checkpoints", []):
                     if cp["name"] == cp_name:
-                        scores.append(f"{cp['result']}/{cp['total']}")
+                        scores.append(cp["result"])
+                        total = cp["total"]
                         break
-            if len(scores) == 1:
-                row += f" {scores[0]:>{col_width}}"
+            if not scores:
+                row += f" {'—':>{col_width}}"
+            elif len(scores) == 1:
+                row += f" {scores[0]}/{total}".rjust(col_width + 1)
             else:
-                row += f" {', '.join(scores):>{col_width}}"
+                mean = statistics.mean(scores)
+                row += f" {mean:.1f}/{total}".rjust(col_width + 1)
         print(row)
 
-    # Print totals
+    # === Total scores with statistics ===
     print("-" * (35 + (col_width + 1) * len(models)))
-    row = f"{'TOTAL':<35}"
-    for model in models:
-        scores = [r["score"] for r in results[model]]
-        if len(scores) == 1:
-            row += f" {scores[0]:.1%}".rjust(col_width + 1)
-        else:
-            mean = sum(scores) / len(scores)
-            row += f" {mean:.1%} (±{max(scores)-min(scores):.1%})".rjust(col_width + 1)
-    print(row)
 
-    # Print categories
-    print("\n" + "-" * 80)
-    print("BY CATEGORY:")
-    categories = set()
+    for label, key in [("TOTAL", "score")]:
+        row = f"{label:<35}"
+        for model in models:
+            scores = [r.get(key, 0) for r in results[model] if r.get("checkpoints")]
+            if not scores:
+                row += f" {'—':>{col_width}}"
+            elif len(scores) == 1:
+                row += f" {scores[0]:.1%}".rjust(col_width + 1)
+            else:
+                mean = statistics.mean(scores)
+                std = statistics.stdev(scores) if len(scores) > 1 else 0
+                row += f" {mean:.1%} ±{std:.1%}".rjust(col_width + 1)
+        print(row)
+
+    # === Statistics detail (if multiple runs) ===
+    if runs_per_model > 1:
+        print(f"\n{'STATISTICS':<35}", end="")
+        for model in models:
+            print(f" {model:>{col_width}}", end="")
+        print()
+        print("-" * (35 + (col_width + 1) * len(models)))
+
+        for stat_name, stat_fn in [("mean", statistics.mean), ("stdev", lambda x: statistics.stdev(x) if len(x) > 1 else 0), ("min", min), ("max", max)]:
+            row = f"  {stat_name:<33}"
+            for model in models:
+                scores = [r.get("score", 0) for r in results[model] if r.get("checkpoints")]
+                if not scores:
+                    row += f" {'—':>{col_width}}"
+                else:
+                    val = stat_fn(scores)
+                    row += f" {val:.1%}".rjust(col_width + 1)
+            print(row)
+
+        # Per-run scores
+        print()
+        for i in range(runs_per_model):
+            row = f"  run {i+1:<31}"
+            for model in models:
+                if i < len(results[model]) and results[model][i].get("checkpoints"):
+                    row += f" {results[model][i]['score']:.1%}".rjust(col_width + 1)
+                else:
+                    row += f" {'—':>{col_width}}"
+            print(row)
+
+    # === By category ===
+    print(f"\n{'BY CATEGORY':<35}", end="")
+    for model in models:
+        print(f" {model:>{col_width}}", end="")
+    print()
+    print("-" * (35 + (col_width + 1) * len(models)))
+
+    categories = []
     for model_results in results.values():
         for run in model_results:
-            categories.update(run.get("categories", {}).keys())
+            for cat in run.get("categories", {}):
+                if cat not in categories:
+                    categories.append(cat)
 
-    for cat in sorted(categories):
+    for cat in categories:
         row = f"  {cat:<33}"
         for model in models:
             scores = []
             for run in results[model]:
                 cat_data = run.get("categories", {}).get(cat, {})
-                scores.append(cat_data.get("score", 0))
-            if len(scores) == 1:
+                if cat_data:
+                    scores.append(cat_data.get("score", 0))
+            if not scores:
+                row += f" {'—':>{col_width}}"
+            elif len(scores) == 1:
                 row += f" {scores[0]:.0%}".rjust(col_width + 1)
             else:
-                mean = sum(scores) / len(scores)
-                row += f" {mean:.0%}".rjust(col_width + 1)
+                mean = statistics.mean(scores)
+                std = statistics.stdev(scores) if len(scores) > 1 else 0
+                row += f" {mean:.0%} ±{std:.0%}".rjust(col_width + 1)
         print(row)
 
     print("=" * 80)
