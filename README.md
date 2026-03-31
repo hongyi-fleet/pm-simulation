@@ -208,4 +208,3 @@ Per-scenario settings in YAML: `agent_turn_interval_minutes`, `response_delay_mi
 - `docs/tradeoffs-and-todos.md` — 7 tradeoffs with data + TODO list
 - `docs/memory-analysis.md` — Token analysis (8K tokens/week = 6.4% of context)
 - `docs/agent-turn-policy.md` — Cooldown design and rationale
-- `docs/architecture.html` — Visual overview (open in browser)
