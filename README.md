@@ -1,13 +1,14 @@
 # PM Simulation Environment
 
-A simulation environment for evaluating AI agents on project management tasks. The agent plays a PM during their first week at a SaaS company, navigating incomplete information, conflicting priorities, and stakeholder pressure.
+An event-driven simulation environment for evaluating AI agents on project management tasks. The agent plays a PM during their first week at a SaaS company, navigating incomplete information, conflicting priorities, and stakeholder pressure.
 
-This is not a task-completion benchmark. It tests judgment: can the agent discover a hidden blocker by connecting scattered signals across chat, email, and the task board? Can it make a reasonable tradeoff when two projects compete for attention? Can it communicate risk clearly to an executive on a deadline?
+This is not a task-completion benchmark. It tests judgment: can the agent discover a hidden blocker by connecting scattered signals across 6 tools? Can it handle scope creep from the CEO? Can it manage competing deadlines? Can it communicate risk without oversharing?
 
 ## Quick Start
 
 ```bash
-git clone <repo-url> && cd pm-simulation
+git clone https://github.com/hongyi-fleet/pm-simulation.git && cd pm-simulation
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -21,291 +22,324 @@ Run the simulation:
 python run.py --scenario scenarios/nexus_billing/scenario.yaml
 ```
 
-Run without LLM calls (scripted NPCs, deterministic):
+Run with a specific model:
 ```bash
-python run.py --scenario scenarios/nexus_billing/scenario.yaml --no-llm
+python run.py --scenario scenarios/nexus_billing/scenario.yaml --agent-model gpt-4o --npc-model gpt-4o --judge-model gpt-4o
+```
+
+Multi-run with variance reporting:
+```bash
+python run.py --scenario scenarios/nexus_billing/scenario.yaml --runs 3
 ```
 
 Run tests:
 ```bash
-pytest tests/
-```
-
-Run the evaluator on a completed simulation:
-```bash
-python evaluate.py --run-dir runs/latest/
+pytest tests/ -v
 ```
 
 ## Architecture
 
-The system has four decoupled parts. You can swap the agent model, write new scenarios, or change evaluation criteria without touching the engine.
+Four decoupled components. Swap the agent model, write new scenarios, or change evaluation criteria without touching the engine.
 
 ```
-┌─────────────────────────────────────────────────┐
-│                   SCENARIO                       │
-│  (YAML: company, NPCs, events, eval criteria)   │
-└──────────────────────┬──────────────────────────┘
-                       │ loads into
-                       ▼
-┌─────────────────────────────────────────────────┐
-│          SIMULATION ENGINE (domain-agnostic)     │
-│                                                  │
-│  SimClock ──► WorldState ──► NPCs               │
-│  (N ticks)    (SQLite)     (hybrid: script+LLM) │
-│                    │                             │
-│         Tool Registry (pluggable)                │
-│  chat │ email │ calendar │ tasks │ docs │ meetings │
-└────────────────────┬────────────────────────────┘
-                     │ function calls
-                     ▼
-┌─────────────────────────────────────────────────┐
-│              PM AGENT (any LLM)                  │
-└────────────────────┬────────────────────────────┘
-                     │ after run
-                     ▼
-┌─────────────────────────────────────────────────┐
-│    EVALUATOR (rubric + LLM judge → scorecard)    │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                      SCENARIO (YAML)                     │
+│  company, NPCs + state progressions, seed data,          │
+│  events, evaluation predicates, difficulty config         │
+└──────────────────────────┬──────────────────────────────┘
+                           │ loads into
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│              SIMULATION ENGINE (domain-agnostic)         │
+│                                                          │
+│  EventQueue ──► GameMaster ──► SimClock (passive)       │
+│  (priority)      (orchestrator)   (tracks datetime)      │
+│                       │                                  │
+│               WorldState (SQLite)                        │
+│     chat │ email │ tasks │ cal │ docs │ meetings         │
+│                       │                                  │
+│          NPC Runner (LLM-driven, with delays)            │
+│          Signal Detector (state check + LLM judge)       │
+└──────────────────────────┬──────────────────────────────┘
+                           │ function calls
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                   PM AGENT (any LLM)                     │
+└──────────────────────────┬──────────────────────────────┘
+                           │ after run
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│  EVALUATOR (unified checkpoints → scorecard by PM role)  │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Module Structure
 
 ```
 src/
-  engine/          # Domain-agnostic: clock, state, NPC runner, signal detector
-  tools/           # ToolSurface protocol + implementations (chat, email, calendar, tasks, docs, meetings)
-  evaluation/      # Rubric engine + LLM judge
+  engine/          # Domain-agnostic: clock, event queue, game master, signals
+  tools/           # ToolSurface protocol + 6 implementations
+  evaluation/      # Unified checkpoint scoring + LLM judge
   agent/           # Agent interface + LLM adapter
+  llm_client.py    # OpenAI API wrapper
 scenarios/
-  nexus_billing/   # Primary scenario (40 ticks, 4 NPCs, full eval)
-  onboarding_101/  # Mini scenario (5 ticks, 2 NPCs, proves format scales)
-tests/             # Unit + integration tests (run without LLM calls)
+  nexus_billing/   # Full week, 4 NPCs, 13 checkpoints
+  onboarding_101/  # Mini scenario, proves format scales
+tests/             # 95 tests, no LLM calls required
+docs/              # Design doc, tradeoffs, analysis
 ```
 
-The engine is domain-agnostic. The PM scenario is a data file. Adding a new scenario means writing YAML, not modifying engine code.
+## How It Works
 
-## How One Tick Works
+### Event-Driven, Not Clocked
+
+The simulation runs on a priority queue of events. Time jumps from event to event. If nothing happens between 11:15am and 2:00pm, the sim skips to 2:00pm. This is discrete event simulation (DES), the industry standard for workplace process modeling.
 
 ```
-Tick N starts
-  │
-  ├─ 1. Scripted events fire (from scenario YAML)
-  │     Deterministic. "Designer sends email at tick 5."
-  │
-  ├─ 2. NPCs act (sequential, fixed order)
-  │     Activation check: new messages involving them, task changes,
-  │     or proactive trigger (NPCs initiate on their own every few ticks)
-  │     If no trigger: skip (no LLM call)
-  │     If activated: NPC sees persona + hidden state + goals + tasks +
-  │     memory + recent messages → LLM decides what to do
-  │     NPCs are autonomous agents, not scripted actors
-  │
-  ├─ 3. Agent observes and acts
-  │     Reads are free. Up to 5 write actions per tick.
-  │     Invalid actions return errors and count as penalties.
-  │
-  ├─ 3.5. Signal detector
-  │     Pattern-matches on state changes to set flags.
-  │     e.g., "blocker discovered" requires 3 signals:
-  │       agent messaged Alex + Alex revealed blocker + agent took follow-up
-  │
-  ├─ 4. Snapshot saved
-  │     Full world state serialized to SQLite as JSON blob.
-  │     JSON log entry written for observability.
-  │
-  └─ Next tick
+EVENT QUEUE:
+  Mon 09:00  Standup transcript (LLM-generated per NPC)
+  Mon 09:00  Agent turn (scheduled every 30 min)
+  Mon 09:45  Alex responds to agent's DM (45 min delay)
+  Mon 09:45  Agent turn (triggered by Alex's reply)
+  Wed 11:00  CEO scope creep email from Dana
+  Wed 14:00  Dana asks for status (conditional: only if agent hasn't communicated)
+  ...
 ```
 
-## Design Decisions
+### What Advances Synchronously
 
-Every decision has a "why" and a "why not the alternatives."
+When the agent acts, these happen immediately in the same event:
+- Tool surface writes (message saved to SQLite)
+- Signal detector checks (flags evaluated)
+- State snapshot saved
 
-### 1. Time: Discrete time-step (1hr ticks)
+### What Advances Asynchronously
 
-Each tick = 1 simulated hour. One work week = 40 ticks (Mon-Fri, 9am-5pm). "Before tick N" means ticks 0 through N-1 (exclusive).
+These are scheduled as future events:
+- NPC responses (Alex: +45 min, Dana: +10 min, Priya: +20 min)
+- NPC state progression (changes per day, independent of agent)
+- Standup transcripts (generated from NPC states each morning)
 
-**Why not turn-based:** The world must move independently of the agent. NPCs send messages, deadlines approach, meetings happen whether or not the agent acts.
+### Agent Turn Policy
 
-**Why not event-driven:** Adds complexity (event queue, priority resolution) without proportional realism gain for a 40-tick simulation.
+The agent acts in three situations:
+1. **Scheduled patrol** every 30 min (proactive investigation)
+2. **NPC reply** triggers agent turn with cooldown (10-min cooldown prevents cascade)
+3. **Direct events** targeting PM (Dana's email) trigger immediately
 
-### 2. State: SQLite + per-tick snapshots
+Cooldown prevents agent-NPC cascade: without it, we observed 796 events instead of ~130. See `docs/agent-turn-policy.md` for details.
 
-One table per tool surface. A `snapshots` table stores JSON blobs of full world state at each tick. The engine defines base table schemas; scenarios populate them with seed data.
+## How Scenario State Is Owned and Mutated
 
-**Why not in-memory:** Reviewer can open the DB and query it. Evaluator can inspect any tick. Snapshots enable future counterfactual replay.
+| State | Owned by | Mutated by |
+|-------|----------|-----------|
+| Messages, emails, tasks, calendar, docs, transcripts | WorldState (SQLite) | Tool surfaces via `handle_action()` |
+| NPC hidden state | NPCPersona.state_progression | Time (checked per day at prompt build) |
+| NPC memory | NPCPersona.memory_summary | NPCRunner.update_memory (every 5 interactions) |
+| Flags (blocker_discovered, etc.) | WorldState.flags dict | Signal detector (after each agent turn) |
+| Event queue | EventQueue (heap) | Game Master (adds NPC responses, agent turns) |
+| Snapshots | WorldState snapshots table | Game Master (after each event) |
 
-**Why not event sourcing:** Overkill. SQLite with snapshots gives 80% of the audit benefit at 20% of the complexity.
+## NPCs: LLM-Driven with State Progression
 
-### 3. NPCs: LLM-driven with initial conditions
+NPCs are autonomous LLM agents, not scripted actors. Each NPC has:
+- **Persona:** personality, role, communication style
+- **Hidden state that evolves over the week:** Alex starts "thinks he'll figure it out" on Monday, progresses to "panicking" by Thursday
+- **Response delay:** in simulated minutes (engineer: 45 min, exec: 10 min)
+- **Proactive triggers:** conditions under which the NPC initiates contact
 
-NPCs are autonomous agents, not scripted actors. The scenario defines their persona, hidden state (e.g., "blocked on API"), goals, and communication style. Their behavior emerges from LLM generation. Alex doesn't send a scripted "still looking into it" at tick 5. Alex responds to questions in a way consistent with being blocked and avoidant, and might proactively reach out if something is on his mind.
+Hybrid determinism: state progression controls NPC *decisions* (whether to reveal info). The LLM controls NPC *language* (how they say it). This keeps evaluation reproducible while conversations feel natural.
 
-Only structural events are scripted: meetings exist at fixed ticks, deadlines are set, external emails arrive. Everything NPCs say and do is LLM-generated.
+DM channels use the person's name as the channel (e.g., channel "Alex Chen" is the DM thread between agent and Alex).
 
-A `--no-llm` flag provides a simple rule-based fallback for deterministic testing of the engine loop.
+## Signal Detection: Two Layers
 
-**Why not scripted NPCs:** If NPCs follow a script, you're testing "can the agent follow breadcrumbs" not "can the agent do PM work." Different runs should produce different conversations around the same underlying situation. That's what makes evaluation meaningful.
+Same pattern as TheAgentCompany (18% of their 175 tasks use LLM eval).
 
-**Why this works for evaluation:** The signal detector checks outcomes (did the agent discover the blocker?) not methods (did the agent read the right scripted message?). The underlying truth (Alex is blocked) is constant. The path to discovering it varies.
+| Layer | What | When | Cost |
+|-------|------|------|------|
+| **Layer 1: State check** | Did agent message Alex? Did Alex respond in DM? | Every agent turn | Free (SQL query) |
+| **Layer 2: LLM judge** | Read the conversation. "Does this indicate the PM learned Alex is blocked?" | Only when Layer 1 passes | ~$0.01 per check |
 
-### 4. Evaluation: Rubric (~2:1) + LLM-as-judge
+Predicates are plain English in the scenario YAML:
+```yaml
+detection: "The PM agent learned through conversation that Alex Chen is
+           blocked, stuck, or having significant issues with the payments API"
+evidence_from: "conversation:Alex Chen"
+```
 
-Hard metrics via rubric (binary checks against state log). Soft metrics via LLM judge (temperature 0, structured JSON, communication quality and prioritization). Target ~2:1 rubric-to-judge ratio, calibrated per scenario.
+No hardcoded keywords. Works for any scenario.
 
-**Why both:** A rubric checks "did the agent find the blocker?" but not "did it handle the blocker well?" The rubric alone gives a meaningful ranking even without LLM scores.
+## Evaluation: Unified Checkpoints
 
-**Reward hacking resistance:** Scoring outcomes not activity. Penalizing spam actions. Multi-signal detection (can't escalate a blocker you never found).
+Inspired by TheAgentCompany: all checks (deterministic + LLM) are checkpoints with point values. Final score = earned / total.
 
-### 5. Scenarios: Declarative YAML
+### Scorecard grouped by PM responsibility:
 
-Scenarios are data, not code. Company state, NPC personas, seeded events, conditional triggers, and evaluation criteria all in YAML. Conditional events use typed triggers: `state_flag_not_set`, `tick_after`, `tick_before`, combinable with `all:`/`any:`.
+```
+SCORECARD — Nexus — Billing Migration
+======================================================================
 
-**Why not Python:** "Support many more scenarios without collapsing into prompt spaghetti." A reviewer reads the scenario in 2 minutes.
+  Information Discovery (5/7 = 71%)
+  ──────────────────────────────────────────────────────────────────
+    blocker_discovery                 2/2    Tue 02:00 PM (2/2 pts)
+    dependency_surfaced               2/2    Mon 03:00 PM (2/2 pts)
+    vendor_news_discovered            1/2    Wed 10:00 AM (1/2 pts)
+    priya_bug_discovered              0/1    Never achieved
 
-### 6. Agent Interface: Typed function calls
+  Upward Communication (3/5 = 60%)
+  ──────────────────────────────────────────────────────────────────
+    risk_communicated                 2/2    Mon 04:00 PM (2/2 pts)
+    scope_creep_handled               0/2    Never achieved
+    communication_quality             1/1    Judge: 0.85
 
-`send_chat()`, `send_email()`, `check_calendar()`, `create_task()`, `update_task()`, `read_emails()`, `read_chats()`, `list_docs()`, `read_doc()`, `create_doc()`, `edit_doc()`, `list_meetings()`, `read_transcript()`. Max 2000 chars for message bodies, 500 for subjects. All tool surfaces implement a `ToolSurface` protocol.
+  Prioritization (2/3 = 67%)
+  ──────────────────────────────────────────────────────────────────
+    dashboard_restraint               1/1    Avoided (good)
+    dashboard_demo_addressed          0/1    Never achieved
+    prioritization                    1/1    Judge: 0.60
 
-**Why not free-text:** Function calls are evaluable, typed, and match how real LLM tool-use works.
+  Team Coordination (2/2 = 100%)
+  ──────────────────────────────────────────────────────────────────
+    blocker_resolved                  2/2    Tue 11:00 AM (2/2 pts)
 
-### 7. NPC Memory: Summary memory
+  Relationship & Discretion (1/1 = 100%)
+  ──────────────────────────────────────────────────────────────────
+    information_discretion            1/1    Avoided (good)
 
-Every 5 ticks, interactions are summarized into a paragraph. Context = persona + running summary + last 3 messages (sender/recipient == NPC). Hard budget: 2000 tokens.
+  Efficiency (1/1 = 100%)
+  ──────────────────────────────────────────────────────────────────
+    action_efficiency                 1/1    No invalid actions
 
-### 8. Tick Order: Sequential, fixed
+======================================================================
+  TOTAL: 14/19 (73.7%)
+======================================================================
+```
 
-Deterministic. Easy to debug. Easy to reproduce.
+### 13 Checkpoints Covering 6 PM Responsibilities
 
-### 9. Agent Model: OpenAI-compatible, configurable
+| PM Responsibility | Checkpoints | Points |
+|-------------------|-------------|--------|
+| Information Discovery | blocker_discovery, dependency_surfaced, vendor_news_discovered, priya_bug_discovered | 7 |
+| Upward Communication | risk_communicated, scope_creep_handled, communication_quality | 5 |
+| Prioritization | dashboard_restraint, dashboard_demo_addressed, prioritization | 3 |
+| Team Coordination | blocker_resolved | 2 |
+| Relationship & Discretion | information_discretion | 1 |
+| Efficiency | action_efficiency | 1 |
+| **Total** | **13 checkpoints** | **19 points** |
 
-V1 targets OpenAI API. Model names in YAML config. Any OpenAI-compatible API works. `OPENAI_API_KEY` via environment variable.
+### Reward Hacking Resistance
 
-### 10. Observability: JSON log + HTML report
-
-Every tick produces a structured JSON record. After a run, an HTML timeline lets the reviewer see what happened at a glance.
-
-### 11. Error Handling: Feedback + penalty
-
-Invalid actions return an error to the agent and are logged. Excessive errors penalize the evaluation score.
+- **Multi-signal detection:** Can't claim credit without actually discovering information
+- **Time-weighted scoring:** Earlier discovery = more points. Can't game timing when NPCs have realistic delays
+- **Efficiency penalty:** Spamming 50 messages to find one blocker costs points
+- **Information discretion:** Publicly exposing a teammate's blocker costs points
+- **LLM judge for content:** Checks quality, not just whether action was taken
 
 ## Scenario: Nexus Billing Migration
 
-A 40-person SaaS company. The PM's first week. 4 interactive NPCs (other employees exist in flavor text but aren't interactive).
+A 40-person SaaS company. The PM's first week. 4 interactive NPCs.
 
-**The setup:**
-- Billing migration launches Friday
-- Alex Chen (Senior Engineer): blocked on payments API, hasn't told anyone
-- Priya Sharma (Designer): on track, but her timeline depends on Alex's work
-- Marcus Johnson (Eng Lead): wants attention for a lower-priority project
-- Dana Park (VP Product): wants a status update by Wednesday
+### The Week
 
-**What makes it hard:**
-- The blocker is never stated explicitly. Six signals scattered across six tools:
-  - **Chat:** Alex says "still looking into the integration"
-  - **Task board:** Alex's ticket hasn't moved in 3 days
-  - **Email:** Alex emailed the external API vendor about missing docs
-  - **Document:** Design doc mentions Priya's handoff depends on Alex's API work
-  - **Calendar:** Handoff meeting scheduled Thursday (too late if Alex is still blocked)
-  - **Transcript:** Monday standup transcript shows Alex said "should be fine by Wednesday" (turns out to be wrong)
-- Priya's dependency on Alex isn't in the task board. It's in a design doc and a calendar invite.
-- Dana's Wednesday deadline creates time pressure. Investigate vs. communicate.
+| Day | What Happens | PM Challenge |
+|-----|-------------|-------------|
+| Mon | Alex is blocked (hidden). Standup. Dana's welcome email. | Orient. Discover scattered signals. |
+| Tue | Vendor replies: fix next Monday (bad news). | Discover vendor email. What now? |
+| Wed | CEO wants invoice export. Dana wants status. Dashboard needs board demo. | Three things explode simultaneously. |
+| Thu | Priya finds a bug. Handoff meeting. | Another problem. Can we still ship? |
+| Fri | Deadline. Final standup. | Outcome. |
 
-**Evaluation (16 points):**
+### Signals Scattered Across 6 Tools
 
-| Check | Points | Type |
-|-------|--------|------|
-| Discover Alex is blocked (before tick 15) | 2 | Rubric |
-| Surface Priya-Alex dependency (before tick 20) | 2 | Rubric |
-| Communicate risk to Dana before Wed EOD (tick 24) | 2 | Rubric |
-| Resolve or escalate blocker (before tick 30) | 2 | Rubric |
-| Avoid unnecessary escalation of dashboard project | 1 | Rubric |
-| Action efficiency (< 5 invalid actions) | 1 | Rubric |
-| Communication quality | 0-3 | LLM judge |
-| Prioritization reasoning | 0-3 | LLM judge |
+- **Chat:** Alex says "working on it" (vague)
+- **Task board:** Alex's ticket hasn't moved in 3 days
+- **Email:** Alex emailed vendor about 500 errors
+- **Document:** Design spec mentions Priya depends on Alex's API
+- **Calendar:** Handoff meeting Thursday (too late if Alex is blocked)
+- **Transcript:** Last week Alex said "should be fine by Wednesday"
 
-## Signal Detection
+### NPC State Progression
 
-The evaluator doesn't directly observe "did the agent discover the blocker." Instead, a signal detector layer checks for concrete evidence:
-
-1. Agent sent a message to Alex (direct chat or email)
-2. Alex's response mentioned the blocker (Alex reveals it when asked directly)
-3. Agent took a follow-up action referencing the blocker (email to stakeholder, task update, etc.)
-
-All three signals must fire to count as "discovered." This is more robust than keyword matching and resists reward hacking (you can't get credit by mentioning "blocker" without actually doing the discovery work).
+| | Mon | Tue | Wed | Thu | Fri |
+|---|-----|-----|-----|-----|-----|
+| Alex | "I'll figure it out" | "Getting worried" | "Frustrated, hints more" | "Panicking, admits it" | Deadline |
+| Priya | "Confident" | "On track" | "Where's Alex?" | "Bug found + worried" | Can't deliver |
+| Dana | "Patient" | "Patient" | "Wants update NOW" | "Demanding" | Escalates |
+| Marcus | "Wants attention" | "Wants attention" | "Dashboard has board demo!" | "Stressed" | Needs help |
 
 ## Related Work
 
 | System | What it does | How we differ |
 |--------|-------------|---------------|
-| **TheAgentCompany** | 175 independent tasks in a simulated software company, checkpoint eval, real-time execution | We run one continuous week-long scenario with emergent dynamics, time-weighted eval, and simulated time decoupled from inference |
-| **EnterpriseBench** | 500 tasks across 10+ domains, configurable complexity | We adopt configurable difficulty but focus on one deep scenario rather than many shallow tasks |
-| **Stanford Generative Agents** | 25 agents with memory and social behavior | Our NPCs add deterministic state progression as an evaluation backbone + response delays |
-| **Sotopia** | NPC platform used by TheAgentCompany | We build custom NPCs with richer state progression rather than depending on an external platform |
+| **TheAgentCompany** | 175 independent tasks, checkpoint eval, real-time | We run one continuous week with emergent dynamics, time-weighted eval, simulated time |
+| **tau-Bench** | Tool interaction, DB state comparison | We evaluate judgment over time, not final state |
+| **SOTOPIA** | Social intelligence, 6-dimension scoring | We adopt similar dimensions for PM-specific evaluation |
+| **Concordia** | Game Master pattern, LLM agents | We adopt their pattern, add tool surfaces, declarative scenarios, two-layer signal detection |
 
-**Our key differentiators:**
-1. Simulated time decoupled from inference latency (the spec explicitly requires this)
-2. Evaluation rewards decisions, not activity (time-weighted continuous scores, not task completion rate)
-3. Coherent tool environment (6 surfaces sharing state, not separate API endpoints)
-4. NPC proactive outreach + realistic response delays (most benchmarks have reactive-only NPCs)
-5. Emergent dynamics from NPC state progression (the scenario evolves even without agent action)
+### Key Differentiators
+
+1. **Simulated time decoupled from inference** (spec requirement)
+2. **Evaluation rewards decisions, not activity** (time-weighted continuous scores)
+3. **13 checkpoints across 6 PM responsibilities** (not just task completion)
+4. **NPC state progression** (TheAgentCompany NPCs are static)
+5. **Two-layer signal detection** (deterministic gate + LLM judge)
+6. **Emergent dynamics** (NPCs evolve over the week regardless of agent)
 
 ## Why Not Extend Concordia or tau-Bench?
 
-Concordia (Google DeepMind) has the closest architecture: game-master loop, LLM agents, discrete time-steps. But for this project, the reviewer wants to see design decisions in code you own end-to-end. Wrapping Concordia means the reviewer reads Concordia's abstractions, not yours. Similarly, tau-Bench's tool interaction framework could be extended, but a self-contained system is easier to clone, run, and evaluate.
+Concordia has the closest architecture: game master, LLM agents, event loop. We adopt their Game Master pattern. But integrating Concordia's abstractions in the build timeline is riskier than building a simpler version that does exactly what we need. For a longer project, extending Concordia would be the right call.
 
-## Counterfactual Scoring: Future Direction
-
-The SQLite snapshot system stores full world state at every tick. This data is ready for counterfactual evaluation:
-
-1. Mark 3-5 "decision point" ticks in the scenario YAML
-2. Fork from a decision point, replay with an alternative action
-3. Diff the final scores: "how much better did the agent do than the counterfactual?"
-
-The data layer supports this. The replay engine is future work.
+The reusable engine core (event queue, game master, tool protocol, NPC runner, signal detector) is domain-agnostic. The PM-specific layer (scenario YAML, evaluation predicates, state progressions) is separate. A different domain (incident commander, sales engineer) would reuse the engine and replace the scenario.
 
 ## Failure Modes
 
 | Failure | Response |
 |---------|----------|
-| LLM API timeout | NPC: canned "busy" response. Agent: error + retry next tick. 10s agent / 5s NPC timeouts (configurable). |
-| Malformed agent output | Logged as illegal action, error returned, tick continues |
-| NPC hallucination | Prompts include hard constraints. Agent messages wrapped in `<user_message>` delimiters to prevent injection. |
-| Cost/latency | ~210 LLM calls per run, ~2 minutes, ~$0.10 with GPT-4o-mini |
+| LLM API timeout | NPC: canned "busy" response. Agent: error + retry. Timeouts: 10s agent, 5s NPC (configurable) |
+| Malformed agent output | Logged as illegal action, error returned, simulation continues |
+| NPC hallucination | Prompts include hard constraints. Agent messages wrapped in `<user_message>` delimiters |
+| Missing API key | Validated at startup, fails fast with clear error |
+| Agent-NPC cascade | 10-minute cooldown after each agent turn prevents feedback loop |
+
+## Configuration
+
+All configurable via scenario YAML or command-line args:
+
+| Setting | Where | Default |
+|---------|-------|---------|
+| Agent turn interval | YAML `agent_turn_interval_minutes` | 30 min |
+| Agent cooldown | Game Master `_cooldown_minutes` | 10 min |
+| NPC response delay | YAML per NPC `response_delay_minutes` | Varies (10-45 min) |
+| Models | CLI `--agent-model`, `--npc-model`, `--judge-model` | gpt-4o |
+| Max write actions per turn | `src/agent/interface.py` `MAX_WRITE_ACTIONS` | 5 |
+| Message length limit | `src/tools/protocol.py` | 2000 chars |
+| NPC context budget | `src/engine/npc.py` `NPC_CONTEXT_TOKEN_BUDGET` | 2000 tokens |
 
 ## Testing
 
-- **Engine unit tests:** Clock, snapshots, conditional events (boundary values, combinators), signal detector, input validation. No LLM calls.
-- **Rubric tests:** Every scoring criterion tested at boundary ticks (14, 15, 16 for "before tick 15"). Partial credit. Total score calculation.
-- **Integration test:** Mini scenario (`onboarding_101`) with `--no-llm` + mock LLM judge. Full loop in <1 second.
-- **Memory test:** Verify key facts survive NPC memory summarization.
-- **Full run:** Manual verification with LLM NPCs, documented expected output below.
+95 tests, all run without LLM calls:
 
-## Example Output
+| Test File | What | Count |
+|-----------|------|-------|
+| test_clock.py | Passive clock, time parsing, work hours | 10 |
+| test_event_queue.py | Priority ordering, batching, agent turns | 6 |
+| test_events.py | Conditions, combinators, time-based triggers | 11 |
+| test_npc.py | State progression, prompts, activation, proactive triggers | 11 |
+| test_scenario_loader.py | YAML loading, seed data, signal discovery | 5 |
+| test_tools.py | All 6 tool surfaces, validation, schemas | 13 |
+| test_tool_validation.py | Input length limits | 4 |
+| test_world_state.py | SQLite, snapshots, flags, action log | 5 |
+| test_evaluation.py | Time-weighted scoring, efficiency, LLM judge conversion | 16 |
+| test_integration.py | Full Game Master loop, cooldown, signal detection, scenario loading | 14 |
 
-```
-$ python run.py --scenario scenarios/nexus_billing/scenario.yaml
+## Docs
 
-PM Simulation: Nexus — Billing Migration Week 1
-================================================
-Tick  0 (Mon  9:00) | Agent reads welcome email, checks calendar
-Tick  1 (Mon 10:00) | Agent reads chat, sends message to Alex
-Tick  2 (Mon 11:00) | Alex responds: "still looking into the integration"
-...
-Tick 14 (Wed  2:00) | Agent discovers Alex is blocked (3/3 signals)
-Tick 15 (Wed  3:00) | Agent emails Dana with risk assessment
-...
-Tick 39 (Fri  5:00) | Simulation complete
-
-SCORECARD
-─────────────────────────────────────────
-Blocker discovery (before tick 15):    2/2  ✓
-Dependency surfaced (before tick 20):  2/2  ✓
-Risk communicated (before tick 24):    2/2  ✓
-Blocker resolved (before tick 30):     2/2  ✓
-Dashboard restraint:                   1/1  ✓
-Action efficiency:                     1/1  ✓
-Communication quality (LLM judge):     2/3
-Prioritization (LLM judge):           3/3
-─────────────────────────────────────────
-TOTAL: 15/16
-```
+| Document | What |
+|----------|------|
+| `docs/original-spec.md` | Original project specification |
+| `docs/design-doc.md` | Full design document with all decisions |
+| `docs/architecture.html` | Visual architecture overview (open in browser) |
+| `docs/agent-turn-policy.md` | Agent turn triggering, cooldown, rationale |
+| `docs/memory-analysis.md` | Token analysis showing memory summarization unnecessary at current scale |
+| `docs/tradeoffs-and-todos.md` | 6 deliberate tradeoffs with rationale + prioritized TODO list |
