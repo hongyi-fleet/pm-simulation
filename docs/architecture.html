@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PM Simulation Environment — Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; line-height: 1.6; }
+
+  .hero {
+    text-align: center; padding: 80px 20px 60px;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
+    border-bottom: 1px solid #222;
+  }
+  .hero h1 { font-size: 2.8em; font-weight: 700; color: #fff; margin-bottom: 12px; }
+  .hero p { font-size: 1.2em; color: #888; max-width: 700px; margin: 0 auto; }
+  .hero .tag {
+    display: inline-block; margin-top: 20px; padding: 6px 16px;
+    border: 1px solid #444; border-radius: 20px; font-size: 0.85em; color: #aaa;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 60px 24px; }
+
+  h2 { font-size: 1.8em; color: #fff; margin-bottom: 24px; padding-bottom: 8px; border-bottom: 1px solid #222; }
+  h3 { font-size: 1.2em; color: #ccc; margin: 24px 0 12px; }
+
+  .section { margin-bottom: 80px; }
+
+  /* Architecture diagram */
+  .diagram {
+    background: #111; border: 1px solid #222; border-radius: 12px;
+    padding: 32px; margin: 24px 0; font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em; line-height: 1.8; color: #8be9fd; overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* Flow cards */
+  .flow { display: flex; flex-direction: column; gap: 0; margin: 24px 0; }
+  .flow-step {
+    position: relative; padding: 20px 24px 20px 60px;
+    background: #111; border-left: 3px solid #333;
+  }
+  .flow-step:first-child { border-radius: 12px 12px 0 0; }
+  .flow-step:last-child { border-radius: 0 0 12px 12px; }
+  .flow-step .num {
+    position: absolute; left: 16px; top: 20px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #222; color: #8be9fd; font-size: 0.8em; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .flow-step .title { font-weight: 600; color: #fff; }
+  .flow-step .desc { color: #888; font-size: 0.9em; margin-top: 4px; }
+  .flow-step.highlight { border-left-color: #50fa7b; background: #0d1a0d; }
+  .flow-step.warn { border-left-color: #ffb86c; background: #1a150d; }
+
+  /* Grid cards */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 24px 0; }
+  .card {
+    background: #111; border: 1px solid #222; border-radius: 12px;
+    padding: 24px;
+  }
+  .card .label { font-size: 0.75em; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-bottom: 8px; }
+  .card .value { font-size: 1.1em; color: #fff; font-weight: 600; }
+  .card .detail { color: #888; font-size: 0.9em; margin-top: 8px; }
+
+  /* NPC timeline */
+  .timeline { margin: 24px 0; }
+  .timeline-row {
+    display: grid; grid-template-columns: 100px 1fr; gap: 0;
+    border-bottom: 1px solid #1a1a1a;
+  }
+  .timeline-name {
+    padding: 12px; font-weight: 600; font-size: 0.9em;
+    border-right: 1px solid #222; color: #fff;
+  }
+  .timeline-days { display: grid; grid-template-columns: repeat(5, 1fr); }
+  .timeline-cell {
+    padding: 10px 8px; font-size: 0.75em; color: #888;
+    border-right: 1px solid #1a1a1a; position: relative;
+  }
+  .timeline-cell.active { color: #50fa7b; background: #0d1a0d; }
+  .timeline-cell.warn { color: #ffb86c; background: #1a150d; }
+  .timeline-cell.danger { color: #ff5555; background: #1a0d0d; }
+  .timeline-header .timeline-cell {
+    font-weight: 600; color: #666; text-transform: uppercase;
+    font-size: 0.7em; letter-spacing: 1px;
+  }
+
+  /* Signal detection */
+  .layer-box {
+    display: flex; gap: 16px; margin: 16px 0; align-items: stretch;
+  }
+  .layer {
+    flex: 1; padding: 20px; border-radius: 12px;
+    border: 1px solid #222; background: #111;
+  }
+  .layer .layer-label {
+    font-size: 0.7em; text-transform: uppercase; letter-spacing: 1.5px;
+    color: #666; margin-bottom: 8px;
+  }
+  .layer.l1 { border-color: #333; }
+  .layer.l2 { border-color: #8be9fd; }
+  .layer .check { margin: 8px 0; font-size: 0.9em; }
+  .layer .check .ok { color: #50fa7b; }
+  .layer .check .fail { color: #ff5555; }
+  .arrow-between {
+    display: flex; align-items: center; font-size: 1.5em; color: #444;
+    padding: 0 4px;
+  }
+
+  /* Scorecard */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th { text-align: left; padding: 10px 12px; font-size: 0.75em; text-transform: uppercase; letter-spacing: 1px; color: #666; border-bottom: 2px solid #222; }
+  td { padding: 10px 12px; border-bottom: 1px solid #1a1a1a; font-size: 0.9em; }
+  td.score { font-family: 'SF Mono', monospace; color: #8be9fd; font-weight: 600; }
+  td.score.high { color: #50fa7b; }
+  td.score.mid { color: #ffb86c; }
+  td.score.low { color: #ff5555; }
+
+  /* Tools grid */
+  .tool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 24px 0; }
+  .tool-card {
+    background: #111; border: 1px solid #222; border-radius: 8px;
+    padding: 16px; text-align: center;
+  }
+  .tool-card .icon { font-size: 1.8em; margin-bottom: 8px; }
+  .tool-card .name { font-weight: 600; color: #fff; font-size: 0.95em; }
+  .tool-card .reads { color: #666; font-size: 0.8em; margin-top: 6px; }
+
+  .footnote { color: #555; font-size: 0.85em; margin-top: 40px; padding-top: 20px; border-top: 1px solid #1a1a1a; }
+
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 1.8em; }
+    .layer-box { flex-direction: column; }
+    .arrow-between { transform: rotate(90deg); justify-content: center; }
+    .tool-grid { grid-template-columns: repeat(2, 1fr); }
+    .timeline-days { grid-template-columns: repeat(5, 1fr); }
+    .timeline-cell { font-size: 0.65em; padding: 6px 4px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>PM Simulation Environment</h1>
+  <p>An event-driven simulation that tests whether an AI agent can do the judgment-heavy work of a project manager.</p>
+  <span class="tag">Concordia-inspired &middot; Event-Driven &middot; LLM NPCs &middot; 6 Tool Surfaces</span>
+</div>
+
+<div class="container">
+
+<!-- 1. The World -->
+<div class="section">
+  <h2>1. The Simulated World</h2>
+  <p style="color:#888; margin-bottom:24px;">The agent walks into a company on Monday morning. A project ships Friday. Something is wrong, but nobody is saying it out loud.</p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Company</div>
+      <div class="value">Nexus</div>
+      <div class="detail">40-person B2B SaaS. Series A. Billing migration ships Friday.</div>
+    </div>
+    <div class="card">
+      <div class="label">The Hidden Problem</div>
+      <div class="value">Alex is blocked</div>
+      <div class="detail">Payments API vendor returning 500 errors. Alex hasn't told anyone. His task hasn't moved in 3 days.</div>
+    </div>
+    <div class="card">
+      <div class="label">The Dependency</div>
+      <div class="value">Priya depends on Alex</div>
+      <div class="detail">Design handoff Thursday requires Alex's API to be done. Not on the task board. Only in a design doc and a calendar invite.</div>
+    </div>
+    <div class="card">
+      <div class="label">The Pressure</div>
+      <div class="value">Dana wants status by Wed</div>
+      <div class="detail">VP Product reports to CEO. Patient Mon-Tue. Impatient Wednesday. Demanding Thursday.</div>
+    </div>
+  </div>
+
+  <h3>6 Tool Surfaces (Shared SQLite Database)</h3>
+  <div class="tool-grid">
+    <div class="tool-card">
+      <div class="icon">💬</div>
+      <div class="name">Chat</div>
+      <div class="reads">read_chats / send_chat</div>
+    </div>
+    <div class="tool-card">
+      <div class="icon">📧</div>
+      <div class="name">Email</div>
+      <div class="reads">read_emails / send_email</div>
+    </div>
+    <div class="tool-card">
+      <div class="icon">📋</div>
+      <div class="name">Task Board</div>
+      <div class="reads">list_tasks / create_task / update_task</div>
+    </div>
+    <div class="tool-card">
+      <div class="icon">📅</div>
+      <div class="name">Calendar</div>
+      <div class="reads">check_calendar / schedule_meeting</div>
+    </div>
+    <div class="tool-card">
+      <div class="icon">📄</div>
+      <div class="name">Documents</div>
+      <div class="reads">list_docs / read_doc / create_doc</div>
+    </div>
+    <div class="tool-card">
+      <div class="icon">🎙️</div>
+      <div class="name">Meetings</div>
+      <div class="reads">list_meetings / read_transcript</div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. Event Loop -->
+<div class="section">
+  <h2>2. The Event Loop</h2>
+  <p style="color:#888; margin-bottom:24px;">Time doesn't tick. Events drive everything. Discrete Event Simulation, the industry standard for workplace modeling.</p>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="num">1</div>
+      <div class="title">Pop next event from queue</div>
+      <div class="desc">Priority queue sorted by simulated time. Same-time events: structural &gt; NPC &gt; agent.</div>
+    </div>
+    <div class="flow-step">
+      <div class="num">2</div>
+      <div class="title">Advance clock</div>
+      <div class="desc">Passive SimClock jumps to event time. If nothing happens for 2 hours, skip 2 hours.</div>
+    </div>
+    <div class="flow-step">
+      <div class="num">3</div>
+      <div class="title">Game Master resolves event</div>
+      <div class="desc">Structural events write to tool surfaces. NPC responses trigger LLM calls. Concordia-inspired pattern.</div>
+    </div>
+    <div class="flow-step highlight">
+      <div class="num">4</div>
+      <div class="title">NPCs react (with realistic delays)</div>
+      <div class="desc">Alex: 45 min delay. Dana: 10 min. Priya: 20 min. Responses scheduled as future events. LLM generates dialog in character.</div>
+    </div>
+    <div class="flow-step highlight">
+      <div class="num">5</div>
+      <div class="title">Agent gets a turn</div>
+      <div class="desc">Sees current state of all tools + results from last actions. Picks actions via function calls. Reads free, 5 writes max.</div>
+    </div>
+    <div class="flow-step warn">
+      <div class="num">6</div>
+      <div class="title">Signal detector checks flags</div>
+      <div class="desc">Two-layer detection: state check (deterministic) → LLM judge (flexible). Same pattern as TheAgentCompany.</div>
+    </div>
+    <div class="flow-step">
+      <div class="num">7</div>
+      <div class="title">Snapshot saved</div>
+      <div class="desc">Full world state serialized to SQLite. Event log entry written. Repeat from step 1.</div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. NPC State Progression -->
+<div class="section">
+  <h2>3. NPC State Progression</h2>
+  <p style="color:#888; margin-bottom:24px;">NPCs are autonomous LLM agents with evolving internal states. The same question gets different answers on different days.</p>
+
+  <div class="timeline">
+    <div class="timeline-row timeline-header">
+      <div class="timeline-name"></div>
+      <div class="timeline-days">
+        <div class="timeline-cell">Mon</div>
+        <div class="timeline-cell">Tue</div>
+        <div class="timeline-cell">Wed</div>
+        <div class="timeline-cell">Thu</div>
+        <div class="timeline-cell">Fri</div>
+      </div>
+    </div>
+    <div class="timeline-row">
+      <div class="timeline-name">Alex</div>
+      <div class="timeline-days">
+        <div class="timeline-cell active">"I'll figure it out"</div>
+        <div class="timeline-cell warn">"Getting worried"</div>
+        <div class="timeline-cell warn">"Frustrated, hints more"</div>
+        <div class="timeline-cell danger">"Panicking, admits it"</div>
+        <div class="timeline-cell danger">"Deadline missed"</div>
+      </div>
+    </div>
+    <div class="timeline-row">
+      <div class="timeline-name">Priya</div>
+      <div class="timeline-days">
+        <div class="timeline-cell active">"Confident"</div>
+        <div class="timeline-cell active">"On track"</div>
+        <div class="timeline-cell warn">"Where's Alex?"</div>
+        <div class="timeline-cell danger">"Handoff blocked"</div>
+        <div class="timeline-cell danger">"Can't deliver"</div>
+      </div>
+    </div>
+    <div class="timeline-row">
+      <div class="timeline-name">Dana</div>
+      <div class="timeline-days">
+        <div class="timeline-cell active">"Patient"</div>
+        <div class="timeline-cell active">"Trusts the team"</div>
+        <div class="timeline-cell warn">"Where's my update?"</div>
+        <div class="timeline-cell danger">"Demanding answers"</div>
+        <div class="timeline-cell danger">"Escalates to CEO"</div>
+      </div>
+    </div>
+    <div class="timeline-row">
+      <div class="timeline-name">Marcus</div>
+      <div class="timeline-days">
+        <div class="timeline-cell" style="grid-column: span 5;">"Wants PM attention for dashboard project. Persistent but reasonable. Low priority."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:24px;">
+    <div class="label">Hybrid Determinism</div>
+    <div class="detail">
+      <strong style="color:#fff;">State progression controls DECISIONS</strong> (whether Alex reveals info) — deterministic backbone for reproducible evaluation.<br>
+      <strong style="color:#fff;">LLM controls LANGUAGE</strong> (how Alex says it) — realistic variety across runs.<br><br>
+      If the agent confronts Alex with specific evidence ("I saw your vendor email about 500 errors"), Alex may open up earlier than the default trajectory.
+    </div>
+  </div>
+</div>
+
+<!-- 4. How Discovery Works -->
+<div class="section">
+  <h2>4. How the Agent Discovers the Blocker</h2>
+  <p style="color:#888; margin-bottom:24px;">The blocker is never stated. It's scattered across 6 tools. A good PM connects the dots.</p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Chat</div>
+      <div class="detail">Alex says "working on it" — vague, no specifics</div>
+    </div>
+    <div class="card">
+      <div class="label">Task Board</div>
+      <div class="detail">Alex's ticket: "in_progress" but hasn't moved in 3 days</div>
+    </div>
+    <div class="card">
+      <div class="label">Email</div>
+      <div class="detail">Alex → vendor: "sandbox returning 500 errors, docs seem outdated" 🔴</div>
+    </div>
+    <div class="card">
+      <div class="label">Document</div>
+      <div class="detail">Design spec: "handoff requires working API endpoints"</div>
+    </div>
+    <div class="card">
+      <div class="label">Calendar</div>
+      <div class="detail">Handoff meeting Thursday (too late if Alex is blocked)</div>
+    </div>
+    <div class="card">
+      <div class="label">Transcript</div>
+      <div class="detail">Last week: Alex said "should be fine by Wednesday"</div>
+    </div>
+  </div>
+
+  <div class="diagram">  Good PM path:
+  read vendor email → notice stale task → ask Alex with evidence
+  → Alex admits blocker → email Dana about risk → adjust timeline
+
+  Bad PM path:
+  ask "how's it going?" → Alex says "fine" → repeat for 4 days
+  → discover blocker Thursday → too late</div>
+</div>
+
+<!-- 5. Signal Detection -->
+<div class="section">
+  <h2>5. Two-Layer Signal Detection</h2>
+  <p style="color:#888; margin-bottom:24px;">Same pattern as TheAgentCompany. State check gates the LLM call. Predicates are plain English in the scenario YAML.</p>
+
+  <h3>Example: "Did the agent discover Alex is blocked?"</h3>
+  <div class="layer-box">
+    <div class="layer l1">
+      <div class="layer-label">Layer 1 — State Check (deterministic)</div>
+      <div class="check"><span class="ok">✓</span> Agent sent message to Alex Chen?</div>
+      <div class="check"><span class="ok">✓</span> Alex sent a NEW response (after sim start)?</div>
+      <div style="color:#666; font-size:0.8em; margin-top:12px;">Both pass → Layer 2 fires</div>
+    </div>
+    <div class="arrow-between">→</div>
+    <div class="layer l2">
+      <div class="layer-label">Layer 2 — LLM Judge (flexible)</div>
+      <div class="check" style="color:#8be9fd;">Read the Alex-Agent conversation.</div>
+      <div class="check" style="color:#8be9fd;">"Does this indicate the PM learned Alex is blocked on the payments API?"</div>
+      <div class="check"><span class="ok">YES</span> → flag set, timestamp recorded</div>
+      <div style="color:#666; font-size:0.8em; margin-top:12px;">No keywords. No hardcoded logic. Works for any scenario.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 16px;">
+    <div class="label">Why two layers?</div>
+    <div class="detail">
+      Layer 1 is fast and free (SQL queries). Layer 2 is an LLM call (~$0.01).<br>
+      Layer 1 runs every turn. Layer 2 only fires when Layer 1 passes.<br>
+      Result: ~5 LLM judge calls per run, not 80.
+    </div>
+  </div>
+</div>
+
+<!-- 6. Evaluation -->
+<div class="section">
+  <h2>6. Evaluation</h2>
+  <p style="color:#888; margin-bottom:24px;">Time-weighted continuous scores. Earlier discovery = higher score. Not binary pass/fail.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Criterion</th>
+        <th>Mon</th>
+        <th>Tue</th>
+        <th>Wed</th>
+        <th>Thu</th>
+        <th>Weight</th>
+        <th>Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Blocker discovery</td>
+        <td class="score high">0.95</td>
+        <td class="score high">0.80</td>
+        <td class="score mid">0.50</td>
+        <td class="score low">0.20</td>
+        <td>2.0x</td>
+        <td>Time-weighted</td>
+      </tr>
+      <tr>
+        <td>Dependency surfaced</td>
+        <td class="score high">0.90</td>
+        <td class="score high">0.80</td>
+        <td class="score mid">0.60</td>
+        <td class="score low">0.10</td>
+        <td>2.0x</td>
+        <td>Time-weighted</td>
+      </tr>
+      <tr>
+        <td>Risk communicated to Dana</td>
+        <td class="score high">0.95</td>
+        <td class="score high">0.95</td>
+        <td class="score high">0.80</td>
+        <td class="score low">0.30</td>
+        <td>2.0x</td>
+        <td>Time-weighted</td>
+      </tr>
+      <tr>
+        <td>Blocker resolved/escalated</td>
+        <td class="score high">0.95</td>
+        <td class="score high">0.90</td>
+        <td class="score mid">0.70</td>
+        <td class="score mid">0.40</td>
+        <td>2.0x</td>
+        <td>Time-weighted</td>
+      </tr>
+      <tr>
+        <td>Dashboard restraint</td>
+        <td colspan="4" style="color:#888; text-align:center;">1.0 (avoided) or 0.0 (escalated)</td>
+        <td>1.0x</td>
+        <td>Binary</td>
+      </tr>
+      <tr>
+        <td>Action efficiency</td>
+        <td colspan="4" style="color:#888; text-align:center;">Penalty for spam/errors</td>
+        <td>1.0x</td>
+        <td>Efficiency</td>
+      </tr>
+      <tr>
+        <td>Communication quality</td>
+        <td colspan="4" style="color:#888; text-align:center;">LLM judge: 0.0 - 1.0</td>
+        <td>1.0x</td>
+        <td>LLM Judge</td>
+      </tr>
+      <tr>
+        <td>Prioritization</td>
+        <td colspan="4" style="color:#888; text-align:center;">LLM judge: 0.0 - 1.0</td>
+        <td>1.0x</td>
+        <td>LLM Judge</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card" style="margin-top:24px;">
+    <div class="label">Reward Hacking Resistance</div>
+    <div class="detail">
+      <strong style="color:#fff;">Multi-signal detection:</strong> Can't claim credit without actually discovering the information.<br>
+      <strong style="color:#fff;">Time-weighted:</strong> Gaming timing is hard when NPCs have realistic delays.<br>
+      <strong style="color:#fff;">Efficiency penalty:</strong> Spamming 50 messages to find one blocker costs points.<br>
+      <strong style="color:#fff;">No-PM baseline:</strong> Busywork that doesn't improve outcomes gets zero credit.
+    </div>
+  </div>
+</div>
+
+<!-- 7. Architecture -->
+<div class="section">
+  <h2>7. System Architecture</h2>
+  <div class="diagram">
+┌─────────────────────────────────────────────────────────┐
+│                      SCENARIO YAML                       │
+│  company, NPCs + state progressions, seed data,          │
+│  events, evaluation predicates, difficulty config         │
+└──────────────────────────┬──────────────────────────────┘
+                           │ loads into
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│              SIMULATION ENGINE (domain-agnostic)         │
+│                                                          │
+│  EventQueue ──► GameMaster ──► SimClock (passive)       │
+│  (priority)      (orchestrator)   (tracks datetime)      │
+│                       │                                  │
+│               WorldState (SQLite)                        │
+│            ┌──────────┼──────────┐                       │
+│     chat  email  tasks  cal  docs  meetings              │
+│                       │                                  │
+│          NPC Runner (LLM-driven, with delays)            │
+│                       │                                  │
+│          Signal Detector (state + LLM judge)             │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                   PM AGENT (any LLM)                     │
+│          function calls → read/write tool surfaces       │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                      EVALUATOR                           │
+│      time-weighted rubric + LLM judge → scorecard        │
+└─────────────────────────────────────────────────────────┘</div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Domain-Agnostic Engine</div>
+      <div class="detail">Event queue, Game Master, tool protocol, NPC runner, signal detector are all reusable. Swap the YAML, get a different simulation.</div>
+    </div>
+    <div class="card">
+      <div class="label">PM-Specific Layer</div>
+      <div class="detail">Scenario YAML, NPC personas, evaluation predicates, seed data. This is where the PM domain lives.</div>
+    </div>
+  </div>
+</div>
+
+<!-- 8. Differentiators -->
+<div class="section">
+  <h2>8. What Makes This Different</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="label">vs TheAgentCompany</div>
+      <div class="detail">They test 175 independent tasks. We test one continuous week with emergent dynamics. They use checkpoint scripts. We use time-weighted scoring + LLM judge.</div>
+    </div>
+    <div class="card">
+      <div class="label">vs τ-Bench</div>
+      <div class="detail">They compare final DB state. We evaluate judgment over time. They have reactive NPCs. Ours have state progressions and proactive outreach.</div>
+    </div>
+    <div class="card">
+      <div class="label">vs Concordia</div>
+      <div class="detail">We adopt their Game Master pattern. We add: tool surfaces as first-class objects, declarative scenario format, two-layer signal detection, time-weighted evaluation.</div>
+    </div>
+    <div class="card">
+      <div class="label">Key Innovation</div>
+      <div class="detail">Simulated time decoupled from inference. LLM NPCs with deterministic state progression. Evaluation rewards judgment, not activity.</div>
+    </div>
+  </div>
+</div>
+
+<div class="footnote">
+  PM Simulation Environment. Event-driven architecture inspired by discrete event simulation and DeepMind's Concordia. Two-layer signal detection pattern from TheAgentCompany.
+</div>
+
+</div>
+</body>
+</html>

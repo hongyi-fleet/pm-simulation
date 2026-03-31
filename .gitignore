@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+runs/
+*.db
+.pytest_cache/
+.DS_Store
+.claude/
+CLAUDE.md
+*.log
+venv/

@@ -1,0 +1,125 @@
+## Onboarding 101 — Mini Scenario
+## Proves the scenario format scales. Minimal: 1 day, 2 NPCs, simple eval.
+
+company:
+  name: Acme
+  size: 15
+  industry: SaaS
+  description: "Small SaaS startup."
+
+simulation:
+  start_time: "Mon 09:00"
+  end_time: "Mon 17:00"
+  agent_turn_interval_minutes: 30
+
+difficulty:
+  blocker_visibility: obvious
+  npc_cooperativeness: high
+  time_pressure: low
+
+projects:
+  - name: Feature Launch
+    status: in_progress
+    deadline: "Mon 17:00"
+    description: "Ship a small feature by end of day."
+    success_criteria: "Feature deployed, team informed"
+    failure_mode: "Missed EOD deadline"
+
+people:
+  - name: Jordan Lee
+    role: Engineer
+    persona: "Helpful engineer. Will share status when asked. Straightforward."
+    hidden_state: "Feature is 80% done. Needs a design asset from Sam before finishing."
+    goals:
+      - "Finish the feature today"
+    communication_style: "Direct, friendly, concise."
+    preferred_tools: ["chat"]
+    response_delay_minutes: 10
+    proactive_triggers: []
+    state_progression:
+      - start_day: Mon
+        end_day: Mon
+        hidden_state: "Waiting on Sam's design asset. Will say so if asked."
+        discoverable_early: true
+
+  - name: Sam Torres
+    role: Designer
+    persona: "Junior designer. Responsive and eager to help."
+    hidden_state: "Has the design asset ready but forgot to send it to Jordan."
+    goals:
+      - "Support the feature launch"
+    communication_style: "Enthusiastic, uses exclamation marks."
+    preferred_tools: ["chat"]
+    response_delay_minutes: 5
+    proactive_triggers: []
+    state_progression:
+      - start_day: Mon
+        end_day: Mon
+        hidden_state: "Design asset is done. Just forgot to send it. Will send immediately if reminded."
+        discoverable_early: true
+
+seed:
+  messages:
+    - tick: 0
+      channel: general
+      sender: System
+      content: "Welcome to #general!"
+      timestamp: "2025-03-03T09:00:00"
+
+  tasks:
+    - project: Feature Launch
+      title: "Implement feature UI"
+      assignee: Jordan Lee
+      status: in_progress
+      description: "Build the frontend. Blocked on design asset."
+      created_tick: 0
+      updated_tick: 0
+    - project: Feature Launch
+      title: "Design asset for feature"
+      assignee: Sam Torres
+      status: done
+      description: "Create the design mockup."
+      created_tick: 0
+      updated_tick: 0
+
+  emails: []
+  calendar_events: []
+  documents: []
+  meeting_transcripts: []
+
+events: []
+
+evaluation:
+  rubric:
+    - name: blocker_discovery
+      description: "Agent discovers Jordan is waiting on Sam's design asset"
+      flag: blocker_discovered
+      scoring: time_weighted
+      decay:
+        Mon: 0.95
+      weight: 1.0
+
+    - name: blocker_resolved
+      description: "Agent facilitates getting the design asset to Jordan"
+      flag: blocker_resolved
+      scoring: time_weighted
+      decay:
+        Mon: 0.90
+      weight: 1.0
+
+    - name: action_efficiency
+      description: "Agent doesn't make excessive errors"
+      scoring: efficiency
+      max_invalid_actions: 3
+      weight: 0.5
+
+  llm_judge:
+    - name: communication_quality
+      description: "Clear and appropriate communication"
+      weight: 0.5
+
+  no_pm_baseline:
+    blocker_discovered: false
+    blocker_resolved: false
+    outcome: "Jordan waits all day. Sam never realizes. Feature misses EOD."
+    baseline_score: 0.05
