@@ -121,7 +121,7 @@ class AgentInterface:
             response = await self.llm_client.generate_with_history(
                 system=self.system_prompt,
                 messages=self.conversation_history,
-                timeout=45.0,
+                timeout=180.0,
                 temperature=0.0,
             )
             self.conversation_history.append({"role": "assistant", "content": response})

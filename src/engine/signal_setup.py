@@ -75,14 +75,14 @@ def _build_llm_detector(
         if check_type == "agent_messaged":
             person = check_params.get("person", "")
             def check(ws, time) -> bool:
-                # Check chat
+                # Check chat: exact channel match only (DM channel = person's name)
                 row = ws.execute(
-                    "SELECT id FROM messages WHERE sender = 'PM Agent' AND (channel = ? OR content LIKE ?)",
-                    (person, f"%{person.split()[0]}%"),
+                    "SELECT id FROM messages WHERE sender = 'PM Agent' AND channel = ?",
+                    (person,),
                 ).fetchone()
                 if row:
                     return True
-                # Check email
+                # Check email: exact recipient match
                 row = ws.execute(
                     "SELECT id FROM emails WHERE sender = 'PM Agent' AND recipient = ?",
                     (person,),

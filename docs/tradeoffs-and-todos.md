@@ -104,7 +104,7 @@ After any agent turn, a 10-minute cooldown starts. NPC replies during cooldown a
 - [ ] Test different models as agent (GPT-4o, GPT-5.4, GPT-5.4-pro) and compare scores
 - [ ] Persist SQLite to disk (`runs/<name>/simulation.db`)
 - [ ] Add noise to seed data (20+ irrelevant emails, chat messages)
-- [ ] Clean up: extract hardcoded variables and prompts into separate config files
+- [x] Clean up: extract hardcoded constants into `src/config.py`
 - [ ] Change blocker_resolved detection from behavior-intent check to world-state check (TheAgentCompany pattern: check if task status changed, meeting scheduled, or email sent to vendor — not if agent "talked about escalating")
 - [ ] NPC state change / check design: make state transitions event-driven instead of day-level. Wire up `discoverable_early` field.
 - [ ] Delay response simulation improvement: variable delays based on time of day, NPC activity, message urgency.
