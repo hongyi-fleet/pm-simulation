@@ -255,30 +255,44 @@ async def main():
 
     results = {}  # model -> [scorecard_dict, ...]
 
+    # Build all tasks
+    tasks = []  # (model, run_num, output_dir)
     for model in args.models:
-        results[model] = []
-
+        results[model] = [None] * args.runs
         for run_num in range(1, args.runs + 1):
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             run_name = f"{model}_{timestamp}"
             if args.runs > 1:
                 run_name += f"_run{run_num}"
-
             output_dir = Path(args.output_dir) / run_name
             output_dir.mkdir(parents=True, exist_ok=True)
+            tasks.append((model, run_num, output_dir))
 
-            print(f"\n{'#' * 60}")
-            print(f"# {model} (run {run_num}/{args.runs})")
-            print(f"{'#' * 60}")
+    total = len(tasks)
+    print(f"\nRunning {total} simulations in parallel...")
 
-            try:
-                scorecard = await run_once(
-                    args.scenario, model, npc_model, judge_model, output_dir
-                )
-                results[model].append(scorecard)
-            except Exception as e:
-                print(f"  FAILED: {e}")
-                results[model].append({"checkpoints": [], "score": 0.0, "categories": {}})
+    async def run_task(model, run_num, output_dir):
+        print(f"  Starting: {model} run {run_num}")
+        try:
+            scorecard = await run_once(
+                args.scenario, model, npc_model, judge_model, output_dir
+            )
+            print(f"  Done: {model} run {run_num} → {scorecard.get('score', 0):.1%}")
+            return scorecard
+        except Exception as e:
+            print(f"  FAILED: {model} run {run_num}: {e}")
+            return {"checkpoints": [], "score": 0.0, "categories": {}}
+
+    # Run all in parallel
+    coros = [run_task(m, r, o) for m, r, o in tasks]
+    all_results = await asyncio.gather(*coros)
+
+    # Distribute results back
+    idx = 0
+    for model in args.models:
+        for run_num in range(args.runs):
+            results[model][run_num] = all_results[idx]
+            idx += 1
 
     # Save combined results
     bench_path = Path(args.output_dir) / "comparison.json"
