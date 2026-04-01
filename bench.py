@@ -35,8 +35,8 @@ from src.evaluation.evaluator import evaluate
 def parse_args():
     parser = argparse.ArgumentParser(description="Benchmark multiple models")
     parser.add_argument(
-        "--scenario", default="scenarios/nexus_billing_short/scenario.yaml",
-        help="Scenario YAML (default: short version)",
+        "--scenario", default="scenarios/nexus_billing/scenario.yaml",
+        help="Scenario YAML (default: full week)",
     )
     parser.add_argument(
         "--models", nargs="+", default=["gpt-4o-mini"],
