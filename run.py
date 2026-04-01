@@ -17,7 +17,6 @@ from pathlib import Path
 from src.engine.scenario_loader import load_scenario
 from src.engine.game_master import GameMaster
 from src.engine.npc import NPCRunner
-from src.engine.signals import SignalDetectorEngine
 from src.engine.signal_setup import setup_signals_for_scenario
 from src.agent.interface import AgentInterface
 from src.llm_client import LLMClient
@@ -118,7 +117,10 @@ async def run_once(args, run_number: int = 1) -> float:
 
     # Set up signal detector from scenario evaluation config
     # Layer 1 (state checks) + Layer 2 (LLM judge) — same pattern as TheAgentCompany
-    signal_detector = setup_signals_for_scenario(scenario["scenario_data"], llm_client=llm)
+    # Hybrid signal detection: simulation flags (sync) + evaluation candidates (post-hoc)
+    signals = setup_signals_for_scenario(scenario["scenario_data"], llm_client=llm)
+    sim_detector = signals["simulation"]
+    eval_recorder = signals["evaluation"]
 
     # Set up game master
     gm = GameMaster(
@@ -128,7 +130,8 @@ async def run_once(args, run_number: int = 1) -> float:
         tool_registry=scenario["tools"],
         npc_runner=npc_runner,
         agent=agent,
-        signal_detector=signal_detector,
+        sim_detector=sim_detector,
+        eval_recorder=eval_recorder,
         scenario_events=scenario["scenario_events"],
         output_dir=output_dir,
     )
@@ -164,6 +167,7 @@ async def run_once(args, run_number: int = 1) -> float:
     scorecard = await evaluate(
         world_state=scenario["world_state"],
         evaluation_config=scenario["evaluation"],
+        eval_recorder=eval_recorder,
         scenario_name=f"{scenario_name} — {project}",
         llm_client=llm,
         no_llm=False,

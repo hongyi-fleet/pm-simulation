@@ -1,156 +1,119 @@
-"""Signal detector: pattern-matches on world state changes to set flags.
+"""Signal detection: two modes.
 
-Runs as step 3.5 in the tick loop, after agent actions but before snapshots.
-Separates flag-setting from evaluation to avoid circular dependencies.
+SimulationDetector: sync, Layer 1 only (SQL checks). Runs every turn.
+  Sets flags immediately. Used for conditional events.
 
-All check functions can be sync or async. The engine awaits them uniformly.
+EvaluationRecorder: sync, Layer 1 only. Records candidate timestamps.
+  LLM judge runs post-hoc in evaluator.
+
+This split eliminates LLM calls during simulation (2435 → 0).
+LLM judge runs once after simulation ends (~30-50 calls total).
 """
 
 from __future__ import annotations
 
-import asyncio
-import inspect
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Callable
 
 
 @dataclass
-class Signal:
-    """A single signal that can be detected from world state."""
+class SimulationFlag:
+    """A flag driven by SQL state check only. Sets immediately during sim."""
 
     name: str
-    check: Callable  # (world_state, time) -> bool (sync or async)
-    detected_at: Any = None  # datetime or int
+    check: Callable  # (world_state) -> bool, sync only
+    triggered: bool = False
 
-    @property
-    def detected(self) -> bool:
-        return self.detected_at is not None
 
-    async def run_check(self, world_state, time) -> bool:
-        """Run the check function, handling both sync and async."""
-        result = self.check(world_state, time)
-        if inspect.isawaitable(result):
-            return await result
-        return result
+class SimulationDetector:
+    """Runs during simulation. Sync only. No LLM calls.
+    Sets flags on world_state for conditional events."""
+
+    def __init__(self):
+        self.flags: list[SimulationFlag] = []
+
+    def add_flag(self, flag: SimulationFlag):
+        self.flags.append(flag)
+
+    def run(self, world_state):
+        """Check all flags. Sync. No LLM."""
+        for flag in self.flags:
+            if flag.triggered:
+                continue
+            if world_state.get_flag(flag.name):
+                flag.triggered = True
+                continue
+            if flag.check(world_state):
+                world_state.set_flag(flag.name, True)
+                flag.triggered = True
 
 
 @dataclass
-class MultiSignalDetector:
-    """Detects a flag by requiring multiple signals to fire."""
+class EvaluationCandidate:
+    """A candidate moment when a flag might have been achieved."""
 
+    timestamp: datetime
     flag_name: str
-    signals: list[Signal] = field(default_factory=list)
-    required_count: int | None = None
-
-    @property
-    def threshold(self) -> int:
-        return self.required_count or len(self.signals)
-
-    async def check(self, world_state, time) -> bool:
-        """Check all signals and return True if threshold met."""
-        for signal in self.signals:
-            if not signal.detected:
-                result = await signal.run_check(world_state, time)
-                if result:
-                    signal.detected_at = time
-
-        detected = sum(1 for s in self.signals if s.detected)
-        return detected >= self.threshold
+    evidence_source: str  # "conversation:Alex Chen", "agent_actions", etc.
 
 
-class SignalDetectorEngine:
-    """Runs all signal detectors and sets flags in world state."""
+class EvaluationRecorder:
+    """Records candidate timestamps during simulation. No LLM calls.
+    Evaluator runs LLM judge on candidates after simulation ends."""
 
     def __init__(self):
-        self.detectors: list[MultiSignalDetector] = []
-        self._last_message_count: int = 0  # Track state changes to avoid redundant LLM calls
+        self.detectors: list[dict] = []  # {name, flag, state_check, detection, evidence_from}
+        self.candidates: list[EvaluationCandidate] = []
+        self._last_data_count: int = 0
 
-    def add_detector(self, detector: MultiSignalDetector):
-        self.detectors.append(detector)
+    def add_detector(self, config: dict):
+        """Add a detector config from YAML."""
+        self.detectors.append(config)
 
-    async def run(self, world_state, time):
-        """Run all detectors. Sets flags on world_state when thresholds are met.
-
-        Optimization: only run detectors when new messages/emails have appeared
-        since the last check. Avoids redundant LLM calls on turns with no new data.
-        """
-        # Check if new evidence appeared since last run
-        # Count messages + emails (conversation content) + write actions only
-        # Read actions (read_chats, list_tasks) don't create new evidence
+    def run(self, world_state, current_time: datetime):
+        """Check state checks and record candidates. Sync. No LLM."""
+        # Skip if no new write data
         current_count = 0
         row = world_state.execute("SELECT COUNT(*) as c FROM messages").fetchone()
         current_count += row["c"]
         row = world_state.execute("SELECT COUNT(*) as c FROM emails").fetchone()
         current_count += row["c"]
         row = world_state.execute(
-            "SELECT COUNT(*) as c FROM action_log WHERE action IN ('send_chat','send_email','create_task','update_task','schedule_meeting','create_doc','edit_doc')"
+            "SELECT COUNT(*) as c FROM action_log WHERE action IN "
+            "('send_chat','send_email','create_task','update_task','schedule_meeting','create_doc','edit_doc')"
         ).fetchone()
         current_count += row["c"]
 
-        if current_count == self._last_message_count:
-            return  # No new data, skip all detectors
-        self._last_message_count = current_count
+        if current_count == self._last_data_count:
+            return
+        self._last_data_count = current_count
 
         for detector in self.detectors:
-            if world_state.get_flag(detector.flag_name):
-                continue
-            if await detector.check(world_state, time):
-                world_state.set_flag(detector.flag_name, True)
+            flag_name = detector.get("flag", "")
 
+            # Skip if already have a confirmed candidate for this flag
+            # (still record in case earlier candidate fails LLM judge)
 
-# --- Built-in signal checks (sync, no LLM) ---
+            # Run state checks
+            state_checks = detector.get("state_checks", [])
+            all_pass = True
+            for check_fn in state_checks:
+                if not check_fn(world_state):
+                    all_pass = False
+                    break
 
-def check_agent_messaged_person(person: str):
-    def check(ws, time) -> bool:
-        row = ws.execute(
-            "SELECT id FROM messages WHERE sender = 'PM Agent' AND (channel = ? OR content LIKE ?)",
-            (person, f"%@{person}%"),
-        ).fetchone()
-        if row:
-            return True
-        row = ws.execute(
-            "SELECT id FROM emails WHERE sender = 'PM Agent' AND recipient = ?",
-            (person,),
-        ).fetchone()
-        return row is not None
-    return check
+            if all_pass and state_checks:
+                # Record candidate
+                self.candidates.append(EvaluationCandidate(
+                    timestamp=current_time,
+                    flag_name=flag_name,
+                    evidence_source=detector.get("evidence_from", "agent_actions"),
+                ))
 
-
-def check_person_revealed_topic(person: str, keywords: list[str]):
-    def check(ws, time) -> bool:
-        for kw in keywords:
-            pattern = f"%{kw}%"
-            row = ws.execute(
-                "SELECT id FROM messages WHERE sender = ? AND content LIKE ?",
-                (person, pattern),
-            ).fetchone()
-            if row:
-                return True
-            row = ws.execute(
-                "SELECT id FROM emails WHERE sender = ? AND body LIKE ?",
-                (person, pattern),
-            ).fetchone()
-            if row:
-                return True
-        return False
-    return check
-
-
-def check_agent_follow_up_action(keywords: list[str]):
-    def check(ws, time) -> bool:
-        for kw in keywords:
-            pattern = f"%{kw}%"
-            row = ws.execute(
-                "SELECT id FROM emails WHERE sender = 'PM Agent' AND (subject LIKE ? OR body LIKE ?)",
-                (pattern, pattern),
-            ).fetchone()
-            if row:
-                return True
-            row = ws.execute(
-                "SELECT id FROM action_log WHERE actor = 'PM Agent' AND action = 'update_task' AND params LIKE ?",
-                (pattern,),
-            ).fetchone()
-            if row:
-                return True
-        return False
-    return check
+    def get_candidates(self, flag_name: str) -> list[EvaluationCandidate]:
+        """Get all candidates for a flag, sorted by time (earliest first)."""
+        return sorted(
+            [c for c in self.candidates if c.flag_name == flag_name],
+            key=lambda c: c.timestamp,
+        )

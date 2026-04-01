@@ -75,7 +75,9 @@ async def run_once(scenario_path: str, agent_model: str, npc_model: str,
 
     npc_runner = NPCRunner(scenario["npcs"], llm_client=llm, no_llm=False)
     agent = AgentInterface(llm_client=llm, no_llm=False, system_prompt=scenario["agent_prompt"])
-    signal_detector = setup_signals_for_scenario(scenario["scenario_data"], llm_client=llm)
+    signals = setup_signals_for_scenario(scenario["scenario_data"], llm_client=llm)
+    sim_detector = signals["simulation"]
+    eval_recorder = signals["evaluation"]
 
     gm = GameMaster(
         clock=scenario["clock"],
@@ -84,7 +86,8 @@ async def run_once(scenario_path: str, agent_model: str, npc_model: str,
         tool_registry=scenario["tools"],
         npc_runner=npc_runner,
         agent=agent,
-        signal_detector=signal_detector,
+        sim_detector=sim_detector,
+        eval_recorder=eval_recorder,
         scenario_events=scenario["scenario_events"],
         output_dir=output_dir,
     )
@@ -98,6 +101,7 @@ async def run_once(scenario_path: str, agent_model: str, npc_model: str,
     result = await evaluate(
         world_state=scenario["world_state"],
         evaluation_config=scenario["evaluation"],
+        eval_recorder=eval_recorder,
         scenario_name=f"{scenario_name} — {project}",
         llm_client=llm,
         no_llm=False,

@@ -26,7 +26,7 @@ from src.engine.clock import SimClock
 from src.engine.event_queue import EventQueue, SimEvent, EventPriority
 from src.engine.events import ScenarioEvent
 from src.engine.npc import NPCRunner
-from src.engine.signals import SignalDetectorEngine
+from src.engine.signals import SimulationDetector, EvaluationRecorder
 from src.engine.world_state import WorldState
 from src.agent.interface import AgentInterface, MAX_WRITE_ACTIONS
 
@@ -55,7 +55,8 @@ class GameMaster:
         tool_registry: dict[str, Any],
         npc_runner: NPCRunner,
         agent: AgentInterface,
-        signal_detector: SignalDetectorEngine,
+        sim_detector: SimulationDetector,
+        eval_recorder: EvaluationRecorder,
         scenario_events: list[ScenarioEvent],
         output_dir: Path | None = None,
     ):
@@ -65,7 +66,8 @@ class GameMaster:
         self.tools = tool_registry
         self.npc_runner = npc_runner
         self.agent = agent
-        self.signal_detector = signal_detector
+        self.sim_detector = sim_detector
+        self.eval_recorder = eval_recorder
         self.scenario_events = scenario_events
         self.output_dir = output_dir or Path("runs/latest")
         # Read cooldown from scenario config if available
@@ -178,7 +180,10 @@ class GameMaster:
 
         # Step 7: Signal detector
         flags_before = set(k for k, v in self.ws.flags.items() if v)
-        await self.signal_detector.run(self.ws, self.clock.current_time)
+        # Simulation detector: sync, SQL only, sets flags for conditional events
+        self.sim_detector.run(self.ws)
+        # Evaluation recorder: sync, SQL only, records candidate timestamps
+        self.eval_recorder.run(self.ws, self.clock.current_time)
         flags_after = set(k for k, v in self.ws.flags.items() if v)
         record.flags_set = list(flags_after - flags_before)
 

@@ -14,7 +14,7 @@ from src.engine.event_queue import EventQueue, SimEvent, EventPriority
 from src.engine.events import ScenarioEvent, Condition
 from src.engine.game_master import GameMaster
 from src.engine.npc import NPCPersona, NPCRunner, StatePhase
-from src.engine.signals import SignalDetectorEngine, MultiSignalDetector, Signal
+from src.engine.signals import SimulationDetector, SimulationFlag, EvaluationRecorder
 from src.engine.world_state import WorldState
 from src.agent.interface import AgentInterface
 from src.tools.chat import ChatTool
@@ -88,7 +88,8 @@ class TestEventQueueIntegration:
             tool_registry=tools,
             npc_runner=NPCRunner([], no_llm=True),
             agent=AgentInterface(no_llm=True),
-            signal_detector=SignalDetectorEngine(),
+            sim_detector=SimulationDetector(),
+            eval_recorder=EvaluationRecorder(),
             scenario_events=[],
         )
         run_async(gm.run())
@@ -116,7 +117,8 @@ class TestEventQueueIntegration:
             tool_registry=tools,
             npc_runner=NPCRunner([], no_llm=True),
             agent=AgentInterface(no_llm=True),
-            signal_detector=SignalDetectorEngine(),
+            sim_detector=SimulationDetector(),
+            eval_recorder=EvaluationRecorder(),
             scenario_events=[],
         )
         run_async(gm.run())
@@ -151,7 +153,8 @@ class TestEventQueueIntegration:
             tool_registry=tools,
             npc_runner=NPCRunner([], no_llm=True),
             agent=AgentInterface(no_llm=True),
-            signal_detector=SignalDetectorEngine(),
+            sim_detector=SimulationDetector(),
+            eval_recorder=EvaluationRecorder(),
             scenario_events=[],
         )
         log = run_async(gm.run())
@@ -198,7 +201,8 @@ class TestNPCResponseIntegration:
             tool_registry=tools,
             npc_runner=npc_runner,
             agent=AgentInterface(no_llm=True),
-            signal_detector=SignalDetectorEngine(),
+            sim_detector=SimulationDetector(),
+            eval_recorder=EvaluationRecorder(),
             scenario_events=[],
         )
         run_async(gm.run())
@@ -233,7 +237,8 @@ class TestConditionalEventsIntegration:
             tool_registry=tools,
             npc_runner=NPCRunner([], no_llm=True),
             agent=AgentInterface(no_llm=True),
-            signal_detector=SignalDetectorEngine(),
+            sim_detector=SimulationDetector(),
+            eval_recorder=EvaluationRecorder(),
             scenario_events=[conditional],
         )
         run_async(gm.run())
@@ -264,7 +269,8 @@ class TestConditionalEventsIntegration:
             tool_registry=tools,
             npc_runner=NPCRunner([], no_llm=True),
             agent=AgentInterface(no_llm=True),
-            signal_detector=SignalDetectorEngine(),
+            sim_detector=SimulationDetector(),
+            eval_recorder=EvaluationRecorder(),
             scenario_events=[conditional],
         )
         run_async(gm.run())
@@ -278,8 +284,8 @@ class TestConditionalEventsIntegration:
 
 class TestSignalDetectionIntegration:
 
-    def test_sync_signal_fires_flag(self):
-        """A sync signal detector should set a flag when conditions are met."""
+    def test_simulation_flag_fires(self):
+        """A simulation flag should set when its check passes."""
         ws, tools = make_world()
         clock = make_clock(1)
         queue = EventQueue()
@@ -292,51 +298,31 @@ class TestSignalDetectionIntegration:
         tools["chat"].handle_action("send_chat", {
             "channel": "Alex Chen", "message": "How's the API?", "sender": "PM Agent"
         }, 0)
-        # Alex responded
-        tools["chat"].handle_action("send_chat", {
-            "channel": "Alex Chen", "message": "Having issues with the vendor API",
-            "sender": "Alex Chen"
-        }, 0)
 
-        # Signal: check if agent messaged Alex (sync check)
-        def check_agent_messaged(ws, time):
+        def check_agent_messaged(ws):
             row = ws.execute(
                 "SELECT id FROM messages WHERE sender = 'PM Agent' AND channel = 'Alex Chen'"
             ).fetchone()
             return row is not None
 
-        def check_alex_replied(ws, time):
-            row = ws.execute(
-                "SELECT id FROM messages WHERE sender = 'Alex Chen' AND content LIKE '%issue%'"
-            ).fetchone()
-            return row is not None
-
-        detector = MultiSignalDetector(
-            flag_name="test_blocker",
-            signals=[
-                Signal("agent_messaged", check_agent_messaged),
-                Signal("alex_replied", check_alex_replied),
-            ],
-            required_count=2,
-        )
-
-        signal_engine = SignalDetectorEngine()
-        signal_engine.add_detector(detector)
+        sim_detector = SimulationDetector()
+        sim_detector.add_flag(SimulationFlag("test_flag", check_agent_messaged))
 
         gm = GameMaster(
             clock=clock, event_queue=queue, world_state=ws,
             tool_registry=tools,
             npc_runner=NPCRunner([], no_llm=True),
             agent=AgentInterface(no_llm=True),
-            signal_detector=signal_engine,
+            sim_detector=sim_detector,
+            eval_recorder=EvaluationRecorder(),
             scenario_events=[],
         )
         run_async(gm.run())
 
-        assert ws.get_flag("test_blocker") is True
+        assert ws.get_flag("test_flag") is True
 
-    def test_signal_does_not_fire_without_all_conditions(self):
-        """Signal should NOT fire if only some conditions are met."""
+    def test_simulation_flag_does_not_fire_without_condition(self):
+        """A simulation flag should NOT fire if check doesn't pass."""
         ws, tools = make_world()
         clock = make_clock(1)
         queue = EventQueue()
@@ -345,85 +331,71 @@ class TestSignalDetectionIntegration:
             event_type="agent_turn", source="scheduler",
         ))
 
-        # Agent messaged Alex, but Alex did NOT reply
+        # No messages from agent to Alex
+        def check_agent_messaged(ws):
+            row = ws.execute(
+                "SELECT id FROM messages WHERE sender = 'PM Agent' AND channel = 'Alex Chen'"
+            ).fetchone()
+            return row is not None
+
+        sim_detector = SimulationDetector()
+        sim_detector.add_flag(SimulationFlag("test_flag", check_agent_messaged))
+
+        gm = GameMaster(
+            clock=clock, event_queue=queue, world_state=ws,
+            tool_registry=tools,
+            npc_runner=NPCRunner([], no_llm=True),
+            agent=AgentInterface(no_llm=True),
+            sim_detector=sim_detector,
+            eval_recorder=EvaluationRecorder(),
+            scenario_events=[],
+        )
+        run_async(gm.run())
+
+        assert ws.get_flag("test_flag") is False
+
+    def test_evaluation_recorder_captures_candidates(self):
+        """Evaluation recorder should record candidate timestamps."""
+        ws, tools = make_world()
+        clock = make_clock(1)
+        queue = EventQueue()
+        queue.push(SimEvent(
+            time=SIM_START, priority=EventPriority.AGENT_TURN,
+            event_type="agent_turn", source="scheduler",
+        ))
+
         tools["chat"].handle_action("send_chat", {
             "channel": "Alex Chen", "message": "How's the API?", "sender": "PM Agent"
         }, 0)
 
-        def check_agent_messaged(ws, time):
+        def check_agent_messaged(ws):
             row = ws.execute(
                 "SELECT id FROM messages WHERE sender = 'PM Agent' AND channel = 'Alex Chen'"
             ).fetchone()
             return row is not None
 
-        def check_alex_replied(ws, time):
-            row = ws.execute(
-                "SELECT id FROM messages WHERE sender = 'Alex Chen'"
-            ).fetchone()
-            return row is not None
-
-        detector = MultiSignalDetector(
-            flag_name="test_blocker",
-            signals=[
-                Signal("agent_messaged", check_agent_messaged),
-                Signal("alex_replied", check_alex_replied),
-            ],
-            required_count=2,
-        )
-
-        signal_engine = SignalDetectorEngine()
-        signal_engine.add_detector(detector)
+        eval_recorder = EvaluationRecorder()
+        eval_recorder.add_detector({
+            "name": "test",
+            "flag": "test_flag",
+            "detection": "test predicate",
+            "evidence_from": "conversation:Alex Chen",
+            "state_checks": [check_agent_messaged],
+        })
 
         gm = GameMaster(
             clock=clock, event_queue=queue, world_state=ws,
             tool_registry=tools,
             npc_runner=NPCRunner([], no_llm=True),
             agent=AgentInterface(no_llm=True),
-            signal_detector=signal_engine,
+            sim_detector=SimulationDetector(),
+            eval_recorder=eval_recorder,
             scenario_events=[],
         )
         run_async(gm.run())
 
-        assert ws.get_flag("test_blocker") is False
-
-    def test_async_signal_works(self):
-        """An async signal check function should work correctly."""
-        ws, tools = make_world()
-        clock = make_clock(1)
-        queue = EventQueue()
-        queue.push(SimEvent(
-            time=SIM_START, priority=EventPriority.AGENT_TURN,
-            event_type="agent_turn", source="scheduler",
-        ))
-
-        tools["chat"].handle_action("send_chat", {
-            "channel": "general", "message": "test", "sender": "PM Agent"
-        }, 0)
-
-        async def async_check(ws, time):
-            row = ws.execute("SELECT id FROM messages WHERE sender = 'PM Agent'").fetchone()
-            return row is not None
-
-        detector = MultiSignalDetector(
-            flag_name="async_test",
-            signals=[Signal("async_signal", async_check)],
-            required_count=1,
-        )
-
-        signal_engine = SignalDetectorEngine()
-        signal_engine.add_detector(detector)
-
-        gm = GameMaster(
-            clock=clock, event_queue=queue, world_state=ws,
-            tool_registry=tools,
-            npc_runner=NPCRunner([], no_llm=True),
-            agent=AgentInterface(no_llm=True),
-            signal_detector=signal_engine,
-            scenario_events=[],
-        )
-        run_async(gm.run())
-
-        assert ws.get_flag("async_test") is True
+        candidates = eval_recorder.get_candidates("test_flag")
+        assert len(candidates) >= 1
 
 
 # === Cooldown Integration ===
@@ -457,7 +429,8 @@ class TestCooldownIntegration:
             tool_registry=tools,
             npc_runner=NPCRunner([], no_llm=True),
             agent=AgentInterface(no_llm=True),
-            signal_detector=SignalDetectorEngine(),
+            sim_detector=SimulationDetector(),
+            eval_recorder=EvaluationRecorder(),
             scenario_events=[],
         )
         run_async(gm.run())
@@ -519,7 +492,8 @@ class TestScenarioLoaderIntegration:
 
         npc_runner = NPCRunner(scenario["npcs"], no_llm=True)
         agent = AgentInterface(no_llm=True, system_prompt=scenario["agent_prompt"])
-        signal_engine = SignalDetectorEngine()
+        sim_detector = SimulationDetector()
+        eval_recorder = EvaluationRecorder()
 
         gm = GameMaster(
             clock=scenario["clock"],
@@ -528,7 +502,8 @@ class TestScenarioLoaderIntegration:
             tool_registry=scenario["tools"],
             npc_runner=npc_runner,
             agent=agent,
-            signal_detector=signal_engine,
+            sim_detector=sim_detector,
+            eval_recorder=eval_recorder,
             scenario_events=scenario["scenario_events"],
         )
 
@@ -548,7 +523,8 @@ class TestScenarioLoaderIntegration:
 
         npc_runner = NPCRunner(scenario["npcs"], no_llm=True)
         agent = AgentInterface(no_llm=True, system_prompt=scenario["agent_prompt"])
-        signal_engine = SignalDetectorEngine()
+        sim_detector = SimulationDetector()
+        eval_recorder = EvaluationRecorder()
 
         gm = GameMaster(
             clock=scenario["clock"],
@@ -557,7 +533,8 @@ class TestScenarioLoaderIntegration:
             tool_registry=scenario["tools"],
             npc_runner=npc_runner,
             agent=agent,
-            signal_detector=signal_engine,
+            sim_detector=sim_detector,
+            eval_recorder=eval_recorder,
             scenario_events=scenario["scenario_events"],
         )
 
@@ -590,7 +567,8 @@ class TestSnapshotIntegration:
             tool_registry=tools,
             npc_runner=NPCRunner([], no_llm=True),
             agent=AgentInterface(no_llm=True),
-            signal_detector=SignalDetectorEngine(),
+            sim_detector=SimulationDetector(),
+            eval_recorder=EvaluationRecorder(),
             scenario_events=[],
         )
         run_async(gm.run())
