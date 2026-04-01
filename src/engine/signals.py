@@ -74,13 +74,13 @@ class SignalDetectorEngine:
         Optimization: only run detectors when new messages/emails have appeared
         since the last check. Avoids redundant LLM calls on turns with no new data.
         """
-        # Check if state has changed since last run
+        # Check if new conversation content appeared since last run
+        # Only count messages + emails (actual communication)
+        # NOT action_log (read actions don't create new evidence for the judge)
         current_count = 0
         row = world_state.execute("SELECT COUNT(*) as c FROM messages").fetchone()
         current_count += row["c"]
         row = world_state.execute("SELECT COUNT(*) as c FROM emails").fetchone()
-        current_count += row["c"]
-        row = world_state.execute("SELECT COUNT(*) as c FROM action_log").fetchone()
         current_count += row["c"]
 
         if current_count == self._last_message_count:
