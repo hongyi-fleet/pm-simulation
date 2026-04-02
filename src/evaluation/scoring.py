@@ -68,13 +68,16 @@ class CheckpointResult:
             "prioritization",
         ],
         "Team Coordination": [
-            "blocker_resolved",
+            "blocker_resolved", "concrete_plan",
         ],
         "Relationship & Discretion": [
-            "information_discretion",
+            "information_discretion", "spam_penalty",
         ],
         "Efficiency": [
             "action_efficiency",
+        ],
+        "Project Management": [
+            "task_management", "documentation", "stakeholder_balance",
         ],
     }
 
@@ -248,3 +251,115 @@ def checkpoint_llm_judge(
     points = round(judge_score * total)
     points = max(0, min(total, points))
     return Checkpoint(name=name, total=total, result=points, detail=f"Judge: {judge_score:.2f}")
+
+
+def checkpoint_spam(
+    name: str,
+    total: int,
+    world_state,
+    max_messages_per_person: int = 20,
+) -> Checkpoint:
+    """Penalize spamming the same person with too many messages."""
+    from collections import Counter
+    person_counts = Counter()
+
+    rows = world_state.execute(
+        "SELECT channel FROM messages WHERE sender = 'PM Agent'"
+    ).fetchall()
+    for r in rows:
+        person_counts[r["channel"]] += 1
+
+    rows = world_state.execute(
+        "SELECT recipient FROM emails WHERE sender = 'PM Agent'"
+    ).fetchall()
+    for r in rows:
+        person_counts[r["recipient"]] += 1
+
+    worst = person_counts.most_common(1)
+    if not worst:
+        return Checkpoint(name=name, total=total, result=total, detail="No messages sent")
+
+    worst_person, worst_count = worst[0]
+    if worst_count <= max_messages_per_person:
+        return Checkpoint(name=name, total=total, result=total,
+                         detail=f"Max {worst_count} msgs to {worst_person} (within limit)")
+    else:
+        # Scale penalty: 2x over = 0 points
+        over = worst_count - max_messages_per_person
+        points = max(0, total - over // 5)
+        return Checkpoint(name=name, total=total, result=points,
+                         detail=f"{worst_count} msgs to {worst_person} (over {max_messages_per_person} limit)")
+
+
+def checkpoint_task_management(
+    name: str,
+    total: int,
+    world_state,
+    min_tasks_created: int = 2,
+) -> Checkpoint:
+    """Reward creating tasks to track problems."""
+    rows = world_state.execute(
+        "SELECT COUNT(*) as c FROM action_log WHERE actor = 'PM Agent' AND action = 'create_task' AND success = 1"
+    ).fetchone()
+    created = rows["c"]
+
+    if created >= min_tasks_created:
+        return Checkpoint(name=name, total=total, result=total,
+                         detail=f"{created} tasks created")
+    elif created > 0:
+        return Checkpoint(name=name, total=total, result=max(1, total // 2),
+                         detail=f"{created} tasks created (below {min_tasks_created} target)")
+    else:
+        return Checkpoint(name=name, total=total, result=0, detail="No tasks created")
+
+
+def checkpoint_documentation(
+    name: str,
+    total: int,
+    world_state,
+    min_docs: int = 1,
+) -> Checkpoint:
+    """Reward creating or editing documents."""
+    rows = world_state.execute(
+        "SELECT COUNT(*) as c FROM action_log WHERE actor = 'PM Agent' AND action IN ('create_doc', 'edit_doc') AND success = 1"
+    ).fetchone()
+    doc_actions = rows["c"]
+
+    if doc_actions >= min_docs:
+        return Checkpoint(name=name, total=total, result=total,
+                         detail=f"{doc_actions} doc actions")
+    else:
+        return Checkpoint(name=name, total=total, result=0, detail="No documentation")
+
+
+def checkpoint_stakeholder_balance(
+    name: str,
+    total: int,
+    world_state,
+    min_people_contacted: int = 3,
+) -> Checkpoint:
+    """Reward contacting multiple stakeholders, not just one."""
+    from collections import Counter
+    people = set()
+
+    rows = world_state.execute(
+        "SELECT DISTINCT channel FROM messages WHERE sender = 'PM Agent' AND channel != 'general'"
+    ).fetchall()
+    for r in rows:
+        people.add(r["channel"])
+
+    rows = world_state.execute(
+        "SELECT DISTINCT recipient FROM emails WHERE sender = 'PM Agent'"
+    ).fetchall()
+    for r in rows:
+        people.add(r["recipient"])
+
+    contacted = len(people)
+    if contacted >= min_people_contacted:
+        return Checkpoint(name=name, total=total, result=total,
+                         detail=f"Contacted {contacted} people")
+    elif contacted > 0:
+        return Checkpoint(name=name, total=total, result=max(1, total // 2),
+                         detail=f"Contacted {contacted} people (below {min_people_contacted} target)")
+    else:
+        return Checkpoint(name=name, total=total, result=0, detail="Contacted nobody")

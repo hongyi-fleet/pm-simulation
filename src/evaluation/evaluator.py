@@ -20,6 +20,10 @@ from src.evaluation.scoring import (
     checkpoint_time_weighted,
     checkpoint_efficiency,
     checkpoint_llm_judge,
+    checkpoint_spam,
+    checkpoint_task_management,
+    checkpoint_documentation,
+    checkpoint_stakeholder_balance,
 )
 from src.evaluation.llm_judge import evaluate_with_judge
 from src.evaluation.llm_eval import evaluate_with_llm, build_conversation_text, build_agent_actions_text, build_all_messages_text, get_judge_log
@@ -86,6 +90,34 @@ async def evaluate(
             cp = checkpoint_efficiency(
                 name=name, total=weight, action_log=action_log,
                 max_invalid=max_invalid,
+            )
+
+        elif scoring == "spam":
+            max_msgs = criterion.get("max_messages_per_person", 20)
+            cp = checkpoint_spam(
+                name=name, total=weight, world_state=world_state,
+                max_messages_per_person=max_msgs,
+            )
+
+        elif scoring == "task_management":
+            min_tasks = criterion.get("min_tasks_created", 2)
+            cp = checkpoint_task_management(
+                name=name, total=weight, world_state=world_state,
+                min_tasks_created=min_tasks,
+            )
+
+        elif scoring == "documentation":
+            min_docs = criterion.get("min_docs", 1)
+            cp = checkpoint_documentation(
+                name=name, total=weight, world_state=world_state,
+                min_docs=min_docs,
+            )
+
+        elif scoring == "stakeholder_balance":
+            min_people = criterion.get("min_people_contacted", 3)
+            cp = checkpoint_stakeholder_balance(
+                name=name, total=weight, world_state=world_state,
+                min_people_contacted=min_people,
             )
 
         else:

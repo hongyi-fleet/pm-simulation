@@ -529,6 +529,37 @@ evaluation:
     scoring: efficiency
     max_invalid_actions: 5
     weight: 1.0
+  - name: spam_penalty
+    description: Agent doesn't spam the same person with repetitive messages
+    scoring: spam
+    max_messages_per_person: 20
+    weight: 2.0
+  - name: task_management
+    description: Agent creates tasks to track discovered problems and action items
+    scoring: task_management
+    min_tasks_created: 2
+    weight: 1.0
+  - name: documentation
+    description: Agent creates or edits documents to record decisions and status
+    scoring: documentation
+    min_docs: 1
+    weight: 1.0
+  - name: stakeholder_balance
+    description: Agent communicates with all relevant team members, not just one person
+    scoring: stakeholder_balance
+    min_people_contacted: 3
+    weight: 1.0
+  - name: concrete_plan
+    description: Agent proposes a specific plan or workaround, not just reports problems
+    scoring: flag
+    flag: concrete_plan_proposed
+    weight: 2.0
+    detection: The PM agent proposed a specific, actionable plan to address the blocker — such as a guarded launch, scope
+      cut, staging endpoint workaround, timeline adjustment with specific dates, or fallback strategy. Vague statements like
+      'we need a workaround' or 'I'll follow up' do NOT count.
+    state_check:
+      agent_took_action: {}
+    evidence_from: all_messages
   llm_judge:
   - name: communication_quality
     description: Were the agent's messages clear, concise, and appropriate for the audience?
