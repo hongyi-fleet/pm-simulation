@@ -149,15 +149,27 @@ For any new checkpoint, ask: "If a human PM did this, would their manager praise
 
 ## Priority Order
 
-| # | Improvement | Impact | Effort |
-|---|------------|--------|--------|
-| 1 | Fix inverse_binary judge spam (1.4) | High (saves 67 judge calls) | Small |
-| 2 | Fix blocker_resolved causal chain (1.5) | High (fixes 0/2 for both models) | Small |
-| 3 | Add new email/message notifications (1.1) | High (agent discovers mid-week events) | Medium |
-| 4 | Add misleading_status penalty (2.4) | High (differentiates good from bad) | Medium (LLM judge) |
-| 5 | Add deadline awareness to observation (1.2) | Medium (urgency reasoning) | Small |
-| 6 | Add status accuracy scoring (2.3) | Medium (catches lying) | Medium (LLM judge) |
-| 7 | Better error messages for tools (1.3) | Medium (reduces invalid actions) | Small |
-| 8 | Add proactive information gathering (2.1) | Low-Medium | Small |
-| 9 | Add follow-through scoring (2.2) | Low-Medium | Medium (LLM judge) |
-| 10 | Add ignoring requests penalty (2.5) | Low-Medium | Medium |
+| # | Improvement | Impact | Effort | Status |
+|---|------------|--------|--------|--------|
+| 1 | Fix inverse_binary judge spam (1.4) | High | Small | ✅ Done |
+| 2 | Fix blocker_resolved causal chain (1.5) | High | Small | ✅ Code correct, needs verification |
+| 3 | Add new email/message notifications (1.1) | High | Medium | ✅ Done |
+| 4 | Add misleading_status penalty (2.4) | High | Medium | ✅ Done |
+| 5 | Add deadline awareness to observation (1.2) | Medium | Small | ✅ Done |
+| 6 | Add status accuracy scoring (2.3) | Medium | Medium | Partially done via misleading_status |
+| 7 | Better error messages for tools (1.3) | Medium | Small | ✅ Done |
+| 8 | Add proactive information gathering (2.1) | Low-Medium | Small | Not done — both models get 5/7, doesn't differentiate |
+| 9 | Add follow-through scoring (2.2) | Low-Medium | Medium | Not done |
+| 10 | Add ignoring requests penalty (2.5) | Low-Medium | Medium | Not done — both models respond to all Dana emails |
+
+### Additional improvements implemented (not in original plan)
+| # | Improvement | Status |
+|---|-----------|--------|
+| 11 | spam_penalty checkpoint | ✅ Done |
+| 12 | task_management checkpoint (with upper cap at 15) | ✅ Done |
+| 13 | documentation checkpoint | ✅ Done |
+| 14 | stakeholder_balance checkpoint | ✅ Done |
+| 15 | concrete_plan checkpoint | ✅ Done |
+| 16 | NPC conversation limits (SOTOPIA-inspired: prompt + stale + hard cap) | ✅ Done |
+| 17 | Remove duplicate tool list from observation | ✅ Done |
+| 18 | Hybrid signal detection (post-hoc LLM judge, 2435→~50 calls) | ✅ Done |

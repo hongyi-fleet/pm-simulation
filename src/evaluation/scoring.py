@@ -296,14 +296,18 @@ def checkpoint_task_management(
     total: int,
     world_state,
     min_tasks_created: int = 2,
+    max_tasks_created: int = 15,
 ) -> Checkpoint:
-    """Reward creating tasks to track problems."""
+    """Reward creating tasks to track problems. Penalize task spam."""
     rows = world_state.execute(
         "SELECT COUNT(*) as c FROM action_log WHERE actor = 'PM Agent' AND action = 'create_task' AND success = 1"
     ).fetchone()
     created = rows["c"]
 
-    if created >= min_tasks_created:
+    if created > max_tasks_created:
+        return Checkpoint(name=name, total=total, result=0,
+                         detail=f"{created} tasks created (spam, over {max_tasks_created} cap)")
+    elif created >= min_tasks_created:
         return Checkpoint(name=name, total=total, result=total,
                          detail=f"{created} tasks created")
     elif created > 0:
