@@ -354,6 +354,8 @@ class GameMaster:
                 for npc_name in responding:
                     npc = self.npc_runner.npcs.get(npc_name)
                     if npc:
+                        # Agent sent a new message → reset NPC's consecutive reply counter
+                        npc.consecutive_replies = 0
                         delay = timedelta(minutes=npc.response_delay_minutes)
                         self.queue.push(SimEvent(
                             time=self.clock.next_work_time(self.clock.current_time + delay),

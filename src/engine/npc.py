@@ -48,6 +48,8 @@ class NPCPersona:
     memory_summary: str = ""
     last_active_time: datetime | None = None
     interaction_count: int = 0
+    consecutive_replies: int = 0  # Consecutive replies to agent without agent saying something new
+    last_message_prefix: str = ""  # First 30 chars of last message, for stale detection
 
     def get_current_hidden_state(self, current_time: datetime) -> str:
         """Get the NPC's hidden state based on the current day."""
@@ -201,6 +203,8 @@ RULES:
 - Your internal state affects HOW you respond, not WHETHER you respond
 - If directly asked with specific evidence, you may reveal more than your default state suggests
 - Keep messages realistic (1-3 sentences for chat, longer for email)
+- When your question has been answered satisfactorily, acknowledge briefly and choose "wait". Do NOT keep asking for more details.
+- If you have nothing new to add, choose "wait". Real people don't reply to every message.
 
 Respond with exactly one JSON object:"""
         return prompt
@@ -214,9 +218,15 @@ Respond with exactly one JSON object:"""
         reply_channel: if set, forces the NPC to reply in this channel
         (e.g., agent messaged channel "Alex Chen" → Alex replies in "Alex Chen")
         """
+        from src.config import MAX_NPC_CONSECUTIVE_REPLIES, STALE_SIMILARITY_THRESHOLD
+
         npc = self.npcs.get(npc_name)
         if not npc:
             return None
+
+        # Layer 3: Hard cap — prevent infinite ping-pong (SOTOPIA max_turn_number pattern)
+        if npc.consecutive_replies >= MAX_NPC_CONSECUTIVE_REPLIES:
+            return {"action": "wait", "params": {}}
 
         npc.last_active_time = current_time
         npc.interaction_count += 1
@@ -248,9 +258,41 @@ Respond with exactly one JSON object:"""
             if action.get("action") == "send_chat":
                 action = self._sanitize_dm_greeting(npc_name, action)
 
+            # Layer 2: Stale detection (SOTOPIA max_stale_turn pattern)
+            if action.get("action") in ("send_chat", "send_email"):
+                msg = action.get("params", {}).get("message", "") or action.get("params", {}).get("body", "")
+                new_prefix = msg[:30].lower().strip()
+
+                if npc.last_message_prefix and self._is_stale(npc.last_message_prefix, new_prefix, STALE_SIMILARITY_THRESHOLD):
+                    # Stale — NPC is repeating itself
+                    npc.consecutive_replies += 1
+                    if npc.consecutive_replies >= 3:  # 3 stale in a row = stop
+                        return {"action": "wait", "params": {}}
+                else:
+                    npc.consecutive_replies = 0  # Reset if new content
+
+                npc.last_message_prefix = new_prefix
+                npc.consecutive_replies += 1
+            else:
+                # "wait" resets nothing — only count actual messages
+                pass
+
             return action
         except Exception:
             return {"action": "wait", "params": {}}
+
+    @staticmethod
+    def _is_stale(old_prefix: str, new_prefix: str, threshold: float) -> bool:
+        """Check if two message prefixes are too similar (stale content)."""
+        if not old_prefix or not new_prefix:
+            return False
+        old_words = set(old_prefix.split())
+        new_words = set(new_prefix.split())
+        if not old_words or not new_words:
+            return False
+        overlap = len(old_words & new_words)
+        total = max(len(old_words), len(new_words))
+        return (overlap / total) >= threshold
 
     def _sanitize_dm_greeting(self, npc_name: str, action: dict) -> dict:
         """Strip wrong-person greetings in DM channels.

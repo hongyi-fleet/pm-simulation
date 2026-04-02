@@ -31,6 +31,10 @@ MAX_MESSAGE_LENGTH = 2000   # Max chars for chat messages and email bodies
 MAX_SUBJECT_LENGTH = 500    # Max chars for email subjects
 MAX_DOC_LENGTH = MAX_MESSAGE_LENGTH * 5  # Max chars for documents
 
+# === NPC Conversation Limits (SOTOPIA-inspired) ===
+MAX_NPC_CONSECUTIVE_REPLIES = 5   # Hard cap per NPC before forced wait
+STALE_SIMILARITY_THRESHOLD = 0.5  # Word overlap ratio to consider stale
+
 # === LLM ===
 LLM_TIMEOUT_DEFAULT = 180.0   # Default timeout for LLM calls (seconds)
 LLM_JUDGE_TIMEOUT = 10.0      # Timeout for LLM judge calls

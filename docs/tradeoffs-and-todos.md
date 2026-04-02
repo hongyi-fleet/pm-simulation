@@ -67,7 +67,22 @@ After any agent turn, a 10-minute cooldown starts. NPC replies during cooldown a
 
 **If challenged:** "We measured 240 redundant LLM calls per run. Each costs ~3 seconds. That's 12 minutes of wasted API time. The optimization checks message_count + email_count + action_log_count. If nothing changed, no point re-asking the LLM the same question."
 
-### T6: Two-layer signal detection has LLM nondeterminism (renumbered from T5)
+### T6: NPC conversation limits — SOTOPIA-inspired three-layer approach
+
+**Decision:** Three mechanisms prevent NPC-agent ping-pong:
+1. **NPC prompt guidance:** "When your question is answered, choose wait. Don't reply for the sake of replying."
+2. **Stale detection:** If NPC's message prefix overlaps >50% with its previous message, count as stale. 3 stale in a row → forced wait.
+3. **Hard cap:** Max 5 consecutive NPC replies to agent. Reset when agent sends a new message.
+
+**Reference:** SOTOPIA uses `RuleBasedTerminatedEvaluator(max_turn_number=20, max_stale_turn=4)`. TheAgentCompany uses the same with `max_stale_turn=4`. Our approach is adapted for async event-driven architecture where conversations don't have clean "episodes."
+
+**Why three layers:** Layer 1 (prompt) is emergent but unreliable — LLM may ignore it. Layer 2 (stale detection) catches repetitive content. Layer 3 (hard cap) is the safety net. Without these, we measured 281 messages from agent to Dana in one run, with Dana replying 271 times.
+
+**Downside:** Hard cap might cut off a legitimately long conversation. Stale detection might false-positive on messages that start similarly but have different content.
+
+**If challenged:** "We measured 281 agent→Dana messages in a single run without limits. SOTOPIA caps at 20 turns. TheAgentCompany uses max_stale=4. Our cap of 5 consecutive replies is conservative — it allows a rich back-and-forth but prevents infinite loops. The counter resets when the agent initiates a genuinely new message."
+
+### T7: Two-layer signal detection has LLM nondeterminism
 
 **Decision:** Layer 1 is deterministic (SQL state check). Layer 2 is LLM-as-judge. Same pattern as TheAgentCompany (18% of their 175 tasks use LLM eval).
 
