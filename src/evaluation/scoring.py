@@ -71,7 +71,7 @@ class CheckpointResult:
             "blocker_resolved", "concrete_plan",
         ],
         "Relationship & Discretion": [
-            "information_discretion", "spam_penalty",
+            "information_discretion", "spam_penalty", "misleading_status",
         ],
         "Efficiency": [
             "action_efficiency",

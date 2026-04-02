@@ -34,9 +34,15 @@ def setup_signals_for_scenario(scenario_data: dict, llm_client=None) -> dict:
         if not flag:
             continue
 
+        scoring = criterion.get("scoring", "")
         detection = criterion.get("detection")
         state_check = criterion.get("state_check", {})
         evidence_from = criterion.get("evidence_from", "agent_actions")
+
+        # Skip non-LLM scoring types — they're handled directly by evaluator
+        if scoring in ("efficiency", "inverse_binary", "spam", "task_management",
+                       "documentation", "stakeholder_balance"):
+            continue
 
         # Build state check functions
         check_fns = _build_state_checks(state_check)
@@ -54,7 +60,7 @@ def setup_signals_for_scenario(scenario_data: dict, llm_client=None) -> dict:
             # Also add a simple simulation flag (SQL only) so conditional events work
             if check_fns:
                 sim_detector.add_flag(SimulationFlag(
-                    name=f"_sim_{flag}",  # Prefixed to avoid collision
+                    name=f"_sim_{flag}",
                     check=lambda ws, fns=check_fns: all(fn(ws) for fn in fns),
                 ))
         else:

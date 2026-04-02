@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from src.config import MAX_WRITE_ACTIONS
@@ -58,6 +58,12 @@ class AgentInterface:
         if trigger:
             obs += f"NOTIFICATION: {trigger}\n\n"
 
+        # Show new messages/emails count and deadline awareness
+        if world_state:
+            new_info = self._get_new_info(world_state, current_time)
+            if new_info:
+                obs += new_info + "\n"
+
         # Show pending replies: who you messaged and who replied
         if world_state:
             pending = self._get_pending_replies(world_state)
@@ -88,17 +94,8 @@ class AgentInterface:
                     obs += f"ERROR: {r.get('error', 'unknown')}\n"
             obs += "\n"
 
-        obs += "Available actions:\n"
-        for tool_name, tool in tool_registry.items():
-            schema = tool.schema()
-            for action_name, action_schema in schema.items():
-                obs += f"  - {action_name}: {action_schema.get('description', '')}\n"
-
-        obs += f"\nYou may take unlimited read actions and up to {MAX_WRITE_ACTIONS} write actions this turn.\n"
-        obs += "\nRespond with ONLY a JSON array of actions, nothing else:\n"
-        obs += '[{"action": "action_name", "params": {...}}, ...]\n'
-        obs += "\nExample: [{\"action\": \"read_emails\", \"params\": {}}, {\"action\": \"send_chat\", \"params\": {\"channel\": \"Alex Chen\", \"message\": \"Hi Alex, how is the billing API going?\"}}]\n"
-        obs += "\nDo NOT wrap in markdown. Do NOT add explanation. ONLY the JSON array.\n"
+        obs += f"You have up to {MAX_WRITE_ACTIONS} write actions this turn. Reads are free.\n"
+        obs += "Respond with ONLY a JSON array. No markdown, no explanation.\n"
 
         return obs
 
@@ -190,6 +187,66 @@ class AgentInterface:
             "list_meetings": "meetings", "read_transcript": "meetings",
         }
         return mapping.get(action_name)
+
+    def _get_new_info(self, world_state, current_time) -> str:
+        """Show agent what's new: unread emails, new messages, deadline proximity."""
+        lines = []
+
+        # Count emails agent hasn't seen (rough: emails where PM is recipient but PM hasn't read recently)
+        total_emails = world_state.execute(
+            "SELECT COUNT(*) as c FROM emails WHERE recipient = 'PM Agent'"
+        ).fetchone()["c"]
+        if total_emails > 0:
+            lines.append(f"You have {total_emails} emails in your inbox.")
+
+        # Count unread DM channels (channels where someone sent a message after agent's last message)
+        channels_with_new = []
+        rows = world_state.execute(
+            "SELECT DISTINCT channel FROM messages WHERE sender != 'PM Agent' AND sender != 'System'"
+        ).fetchall()
+        for r in rows:
+            ch = r["channel"]
+            if ch in ("general", "engineering") or ch.startswith("#"):
+                continue
+            # Check if there's a message from someone else after agent's last message in that channel
+            last_agent = world_state.execute(
+                "SELECT MAX(id) as mid FROM messages WHERE sender = 'PM Agent' AND channel = ?", (ch,)
+            ).fetchone()
+            last_agent_id = last_agent["mid"] or 0
+            new_msg = world_state.execute(
+                "SELECT id FROM messages WHERE channel = ? AND sender != 'PM Agent' AND id > ? LIMIT 1",
+                (ch, last_agent_id)
+            ).fetchone()
+            if new_msg:
+                channels_with_new.append(ch)
+
+        if channels_with_new:
+            lines.append(f"New messages from: {', '.join(channels_with_new)}")
+
+        # Deadline awareness
+        if isinstance(current_time, datetime):
+            from src.engine.clock import SIM_START
+            # Friday 2pm deadline for billing
+            fri_deadline = SIM_START + timedelta(days=4, hours=5)  # Fri 14:00
+            remaining = fri_deadline - current_time
+            if remaining.total_seconds() > 0:
+                hours_left = remaining.total_seconds() / 3600
+                if hours_left <= 8:
+                    lines.append(f"⚠ Billing Migration deadline in {hours_left:.0f} hours!")
+                elif hours_left <= 24:
+                    lines.append(f"Billing Migration deadline tomorrow.")
+                else:
+                    days_left = hours_left / 8  # work days
+                    lines.append(f"Billing Migration deadline in {days_left:.1f} work days.")
+
+        # PM's own task count
+        pm_tasks = world_state.execute(
+            "SELECT COUNT(*) as c FROM tasks WHERE assignee = 'PM Agent' AND status != 'done'"
+        ).fetchone()["c"]
+        if pm_tasks > 0:
+            lines.append(f"You have {pm_tasks} open tasks assigned to you.")
+
+        return "\n".join(lines)
 
     @staticmethod
     def is_write_action(action_name: str) -> bool:

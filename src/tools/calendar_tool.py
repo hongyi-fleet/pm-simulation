@@ -69,7 +69,23 @@ class CalendarTool:
     def _schedule_meeting(self, params: dict, tick: int) -> ActionResult:
         meeting_tick = params.get("tick")
         if meeting_tick is None:
-            return ActionResult(success=False, error="Meeting tick is required")
+            meeting_tick = params.get("time")
+        if meeting_tick is None:
+            return ActionResult(
+                success=False,
+                error="Meeting tick is required. Use tick=N where N is an integer. "
+                      "Day 0 (Mon) ticks 0-15, Day 1 (Tue) 16-31, Day 2 (Wed) 32-47, "
+                      "Day 3 (Thu) 48-63, Day 4 (Fri) 64-79. Example: tick=32 for Wed 9am."
+            )
+        # Accept string numbers
+        try:
+            meeting_tick = int(meeting_tick)
+        except (ValueError, TypeError):
+            return ActionResult(
+                success=False,
+                error=f"Meeting tick must be an integer, got '{meeting_tick}'. "
+                      "Example: tick=32 for Wed 9am."
+            )
         if meeting_tick <= tick:
             return ActionResult(success=False, error="Cannot schedule meeting in the past")
         if meeting_tick >= 80:  # Max ticks safeguard

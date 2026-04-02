@@ -57,9 +57,16 @@ class TaskTool:
         return ActionResult(success=True, data={"created": True, "title": title})
 
     def _update_task(self, params: dict, tick: int) -> ActionResult:
-        task_id = params.get("task_id")
+        task_id = params.get("task_id") or params.get("id")
         if task_id is None:
-            return ActionResult(success=False, error="task_id is required")
+            return ActionResult(
+                success=False,
+                error="task_id is required. Use list_tasks first to see task IDs, then update_task with task_id=N."
+            )
+        try:
+            task_id = int(task_id)
+        except (ValueError, TypeError):
+            return ActionResult(success=False, error=f"task_id must be an integer, got '{task_id}'")
 
         row = self.ws.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if row is None:
