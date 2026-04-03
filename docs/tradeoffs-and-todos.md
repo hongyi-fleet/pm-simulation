@@ -136,6 +136,9 @@ After any agent turn, a 10-minute cooldown starts. NPC replies during cooldown a
 - [ ] Update design doc with all changes since last review
 - [ ] Add time management checkpoint (did agent propose scope cut or timeline adjustment?)
 
+### Priority 1.5 (design ready, not implemented)
+- [ ] **Turn-level shaping reward (SOTOPIA-RL inspired).** Current reward density is 4.5% (4 flags in 88 turns). Add per-turn signals via post-hoc action_log analysis: read new info source = +0.1, targeted question = +0.1, repeated message = -0.1, invalid action = -0.05, created task = +0.1, empty turn = -0.05, misleading status to Dana = -0.2. All SQL queries, no LLM. Architecture supports this: action_log has every operation, evaluator can compute turn-by-turn.
+
 ### Priority 2 (extend)
 - [ ] NPC-to-NPC interactions
 - [ ] Finer state progression (hour-level or condition-based)
