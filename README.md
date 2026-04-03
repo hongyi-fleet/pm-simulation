@@ -4,6 +4,8 @@ An event-driven simulation where an AI agent plays a project manager during thei
 
 ## Quick Start
 
+Requires Python 3.10+ and an OpenAI API key.
+
 ```bash
 git clone https://github.com/hongyi-fleet/pm-simulation.git && cd pm-simulation
 python3 -m venv venv && source venv/bin/activate
@@ -14,16 +16,22 @@ python run.py --scenario scenarios/nexus_billing/scenario.yaml
 
 Options:
 ```bash
-# Choose models
-python run.py --scenario scenarios/nexus_billing/scenario.yaml --agent-model gpt-5.4 --npc-model gpt-5.4-mini
+# Choose models (defaults: gpt-4o for agent/npc/judge)
+python run.py --scenario scenarios/nexus_billing/scenario.yaml --agent-model gpt-4o --npc-model gpt-4o-mini
 
-# Short scenario (Mon-Wed, faster iteration)
-python run.py --scenario scenarios/nexus_billing_short/scenario.yaml --agent-model gpt-5.4-mini --npc-model gpt-5.4-mini
+# Short scenario (Mon-Wed, faster iteration, ~10 min)
+python run.py --scenario scenarios/nexus_billing_short/scenario.yaml
+
+# Full week scenario (~15-30 min)
+python run.py --scenario scenarios/nexus_billing/scenario.yaml
+
+# Multiple runs with variance reporting
+python run.py --scenario scenarios/nexus_billing/scenario.yaml --runs 3
 
 # Benchmark: compare models in parallel
-python bench.py --models gpt-5.4-mini gpt-5.4 --npc-model gpt-5.4-mini --runs 3
+python bench.py --models gpt-4o-mini gpt-4o --npc-model gpt-4o-mini --runs 3
 
-# Run tests (95 tests, no LLM calls)
+# Run tests (no LLM calls needed, no API key required)
 pytest tests/ -v
 ```
 
@@ -66,7 +74,7 @@ src/
   agent/
     interface.py     # Agent function-call interface, pending reply tracking
 scenarios/
-  nexus_billing/     # Full week (Mon-Fri), 4 NPCs, 13 checkpoints
+  nexus_billing/     # Full week (Mon-Fri), 4 NPCs, 19 checkpoints
   nexus_billing_short/  # Mon-Wed, 60-min intervals (fast iteration)
   onboarding_101/    # Mini scenario (proves format scales)
 tests/               # 95 tests, no LLM calls
@@ -98,7 +106,7 @@ NPC responses scheduled as future events (+45 min for engineer, +10 min for VP).
 
 **NPC greeting guardrails.** In DM channels, NPC messages addressed to wrong person are sanitized (e.g., Marcus saying "Hi Alex" in his own DM channel → greeting stripped).
 
-**Signal detection optimization.** LLM judge calls only fire when new data appears (messages, emails, action log changes). Reduces LLM calls from ~240 to ~20-30 per run.
+**Signal detection optimization.** Hybrid architecture: simulation flags (SQL only, real-time) drive conditional events; evaluation flags (SQL + LLM judge, post-hoc) drive scoring. Reduces LLM judge calls from ~2,435 to ~50 per run.
 
 **Checkpoint causal chains.** `blocker_resolved` requires `blocker_discovered` to fire first. Can't get credit for resolving a blocker you haven't found.
 
@@ -132,17 +140,18 @@ All checks (deterministic + LLM) are checkpoints with point values. Final score 
 
 Time-weighted scoring lives inside checkpoints: discovering the blocker Monday = full points, Thursday = 1 point.
 
-### 13 Checkpoints Across 6 PM Responsibilities
+### 19 Checkpoints Across 7 PM Responsibilities
 
 | Responsibility | Checkpoints | Points |
 |----------------|-------------|--------|
 | **Information Discovery** | blocker_discovery (2), dependency_surfaced (2), vendor_news_discovered (2), priya_bug_discovered (1) | 7 |
 | **Upward Communication** | risk_communicated (2), scope_creep_handled (2), communication_quality (1) | 5 |
 | **Prioritization** | dashboard_restraint (1), dashboard_demo_addressed (1), prioritization (1) | 3 |
-| **Team Coordination** | blocker_resolved (2) | 2 |
-| **Relationship & Discretion** | information_discretion (1) | 1 |
+| **Team Coordination** | blocker_resolved (2), concrete_plan (2) | 4 |
+| **Relationship & Discretion** | information_discretion (1), spam_penalty (2), misleading_status (2) | 5 |
 | **Efficiency** | action_efficiency (1) | 1 |
-| **Total** | **13 checkpoints** | **19 points** |
+| **Project Management** | task_management (1), documentation (1), stakeholder_balance (1) | 3 |
+| **Total** | **19 checkpoints** | **28 points** |
 
 ## Scenario: Nexus Billing Migration
 
@@ -167,7 +176,7 @@ NPCs are LLM-driven with deterministic state progression:
 
 ## Benchmark Results
 
-Scenario: `nexus_billing_short` (Mon-Wed). NPC/Judge: gpt-5.4-mini.
+Scenario: `nexus_billing_short` (Mon-Wed). NPC/Judge: gpt-5.4-mini. Run before new checkpoints (spam_penalty, task_management, etc.) were added — scores are out of the original 19 points.
 
 | Category | gpt-5.4-mini | gpt-5.4 |
 |----------|-------------|---------|
@@ -205,6 +214,9 @@ Per-scenario settings in YAML: `agent_turn_interval_minutes`, `response_delay_mi
 - `docs/original-spec.md` — Original specification
 - `docs/design-doc.md` — Full design document
 - `docs/benchmark-results.md` — Model comparison with judge evidence
-- `docs/tradeoffs-and-todos.md` — 7 tradeoffs with data + TODO list
-- `docs/memory-analysis.md` — Token analysis (8K tokens/week = 6.4% of context)
+- `docs/tradeoffs-and-todos.md` — 8 tradeoffs with data + TODO list
+- `docs/memory-analysis.md` — Token analysis (revised: 125K tokens = 97.6% of context, bottleneck is conversation history)
 - `docs/agent-turn-policy.md` — Cooldown design and rationale
+- `docs/evaluation-timing.md` — Real-time vs post-hoc evaluation analysis
+- `docs/simulation-improvement-plan.md` — 18 improvements implemented
+- `docs/research-references.md` — TheAgentCompany, SOTOPIA, Concordia and other references
