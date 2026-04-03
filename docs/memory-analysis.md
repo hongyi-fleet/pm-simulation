@@ -1,5 +1,24 @@
 # Memory & Token Analysis
 
+> **UPDATE (2026-04-02):** Original analysis below only counted SQLite data (~8K tokens). Actual measurement from benchmark runs shows agent conversation history uses ~107K tokens (97.6% of context). The bottleneck is agent's own observation+response history, not tool data. See T1 in tradeoffs-and-todos.md.
+
+---
+
+## Revised Analysis (from actual benchmark runs)
+
+| Data source | Tokens | % of 128K |
+|------------|--------|-----------|
+| SQLite tool data (messages + emails) | ~1,260 | 1.0% |
+| **Agent conversation history (obs + response × 2142 actions)** | **~107,000** | **83.6%** |
+| NPC reactions | ~16,500 | 12.9% |
+| **Total** | **~125,000** | **97.6%** |
+
+Agent conversation history is 85x larger than tool data. Sliding window (18 messages ≈ 9K tokens) helps but loses early-week reasoning.
+
+---
+
+## Original Analysis (tool data only — still valid for that scope)
+
 ## Current Setup: 1 Week, 4 NPCs, 1 Project
 
 | Data source | Token count | % of context (128K) |

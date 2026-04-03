@@ -6,17 +6,23 @@ Decisions made, limitations acknowledged, and future work prioritized.
 
 ## Tradeoffs
 
-### T1: Neither agent nor NPCs need memory summarization at current scale
+### T1: Agent conversation history is the real memory bottleneck (revised)
 
-**Decision:** Agent uses a sliding window (first 2 + last 16 messages). NPCs have summary memory every 5 interactions but it's only 150 tokens. Neither actually needs summarization.
+**Decision:** Agent uses a sliding window (first 2 + last 16 messages). NPC memory summarization implemented but lightweight.
 
-**Data:**
-- Agent: 1 week generates ~8,000 tokens of tool data. 6.4% of 128K context. Agent reads from SQLite, not conversation history. Sliding window drops old reasoning, not source data.
-- NPC: Context uses 335-485 tokens out of 2,000 budget (17-24%). State progression + last 3 messages handles consistency.
+**Data (revised from actual runs):**
+- Tool data (messages + emails in SQLite): ~1,260 tokens — trivial
+- Agent conversation history (observation + response × turns): **~107,000 tokens — 97.6% of 128K context**
+- Original estimate of 8K tokens was wrong — it only counted SQLite data, not conversation history
+- Each turn's observation is ~500 tokens. Active agents produce 2000+ actions across a week.
+- Sliding window (18 messages) keeps ~9,000 tokens of recent history. Early-week reasoning is lost.
+- This explains agent behavior degradation Thu/Fri — confirmed by LIFELONG-SOTOPIA finding that all models' performance degrades over time.
 
-**Threshold:** Summarization needed at ~13 weeks, ~53 NPCs, or ~10 projects.
+**NPC memory:** Still lightweight (335-485 tokens, 17-24% of budget). Not the bottleneck.
 
-**If challenged:** "8,000 tokens out of 128K. The database is the agent's memory. NPC uses 17% of budget. State progression handles consistency. We have the NPC summarization implemented as future-proofing, but the data shows it's not needed at this scale."
+**Implication:** Agent memory summarization moves from "not needed" to "should have" for a full-week simulation. The database is long-term memory (always re-readable), but the agent's own reasoning chain is lost. For RL training, this is a priority.
+
+**If challenged:** "We initially estimated 8K tokens and said memory wasn't needed. Actual measurement showed 125K — the bottleneck is conversation history, not tool data. The agent can always re-read SQLite, but can't recall its own earlier analysis. This matches LIFELONG-SOTOPIA's finding that all models degrade over time. Agent summarization is a priority for v2."
 
 ### T2: NPC state progression is day-level, not hour-level
 
